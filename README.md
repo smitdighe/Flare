@@ -9,9 +9,11 @@
 ╚═╝      ╚══════╝ ╚═╝  ╚═╝ ╚═╝  ╚═╝ ╚══════╝
 </pre>
 
-*AI that stands watch over your logs.*
+### AI that stands watch over your logs
 
 </div>
+
+> 🌐 **Live Demo:** [https://gitlytics-red.vercel.app/](https://flare-secure.vercel.app/)
 
 <div align="center">
 
