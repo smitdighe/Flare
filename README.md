@@ -13,7 +13,7 @@
 
 </div>
 
-> 🌐 **Live Demo:** [https://gitlytics-red.vercel.app/](https://flare-secure.vercel.app/)
+> 🌐 **Live Demo:** https://flare-secure.vercel.app/
 
 <div align="center">
 
