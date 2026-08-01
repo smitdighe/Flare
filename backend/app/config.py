@@ -57,6 +57,7 @@ class StoreSettings(BaseModel):
     chroma_persist_dir: Path
     chroma_collection: str
     embedding_model: str
+    embedding_backend: str
 
 
 class Settings(BaseSettings):
@@ -97,6 +98,19 @@ class Settings(BaseSettings):
     chroma_persist_dir: Path = Path("./data/chroma")
     chroma_collection: str = "mitre_attack"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Which runtime holds all-MiniLM-L6-v2's weights.
+    #
+    # "onnx" (default) uses the ONNX build chromadb ships with; "sentence-transformers"
+    # uses the torch build, which is an OPT-IN because torch costs ~400MB of RSS on
+    # top of the ~130MB the app already holds. A 512MB container running the torch
+    # path is killed by the OOM reaper seconds after boot — the process never gets
+    # far enough to answer a health check, so the symptom is a 502, not a traceback.
+    # Both paths embed the same model into the same 384 dimensions.
+    embedding_backend: str = "onnx"
+    # Where the ONNX weights are unpacked. Under ./data (not ~/.cache) so a build
+    # step that warms the model leaves it somewhere the runtime is guaranteed to
+    # find, rather than in a home directory the runtime may not inherit.
+    embedding_cache_dir: Path = Path("./data/onnx")
 
     dataset_path: Path = Path("./data/datasets")
     ground_truth_path: Path = Path("./data/labels")
@@ -130,10 +144,10 @@ class Settings(BaseSettings):
     # calls stop_after="classify" and returns in ~2s — so this budget really only
     # bounds the full path (eval with enrichment on, seeding, demos).
     triage_timeout_seconds: float = 120.0
-    # Load the sentence-transformers model in the BACKGROUND at startup. Cold
-    # load is ~34s and, unwarmed, it lands inside the first alert's retrieve node
-    # and consumes the entire triage budget. Backgrounded, boot stays instant and
-    # the first alert is already warm.
+    # Load the embedding model in the BACKGROUND at startup. Cold load is ~34s on
+    # the torch backend and, unwarmed, it lands inside the first alert's retrieve
+    # node and consumes the entire triage budget. Backgrounded, boot stays instant
+    # and the first alert is already warm.
     warm_embedding_model_on_startup: bool = True
 
     event_bus_maxsize: int = 100
@@ -202,12 +216,23 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL must start with sqlite+aiosqlite")
         return v
 
-    @field_validator("chroma_persist_dir")
+    @field_validator("chroma_persist_dir", "embedding_cache_dir")
     @classmethod
     def _chroma_dir_abs(cls, v: Path) -> Path:
         p = Path(v).expanduser().resolve()
         p.mkdir(parents=True, exist_ok=True)
         return p
+
+    @field_validator("embedding_backend")
+    @classmethod
+    def _embedding_backend_known(cls, v: str) -> str:
+        backend = v.strip().lower()
+        if backend not in {"onnx", "sentence-transformers"}:
+            raise ValueError(
+                "EMBEDDING_BACKEND must be 'onnx' or 'sentence-transformers', "
+                f"got {v!r}"
+            )
+        return backend
 
     @field_validator("gemini_model")
     @classmethod
@@ -278,6 +303,7 @@ class Settings(BaseSettings):
             chroma_persist_dir=self.chroma_persist_dir,
             chroma_collection=self.chroma_collection,
             embedding_model=self.embedding_model,
+            embedding_backend=self.embedding_backend,
         )
 
     @property

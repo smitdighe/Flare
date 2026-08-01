@@ -5,6 +5,8 @@
 # Data / caches
 data/chroma/
 data/datasets/
+# ONNX embedding weights (~80MB, downloaded on first use / at build time)
+data/onnx/
 *.db
 
 # Python

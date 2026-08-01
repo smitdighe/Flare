@@ -336,13 +336,14 @@ def check_sqlite() -> None:
 
 
 def check_embedding() -> None:
+    """Exercise whichever backend the app will actually use, not just torch."""
     try:
-        from sentence_transformers import SentenceTransformer
+        from app.config import get_settings
+        from app.rag.indexer import get_embedding_model
 
-        model = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-        st = SentenceTransformer(model)
-        vec = st.encode("flare test string")
-        record("Embedding", "OK", f"model={model} dim={len(vec)}")
+        backend = get_settings().embedding_backend
+        vec = get_embedding_model().encode(["flare test string"])[0]
+        record("Embedding", "OK", f"backend={backend} dim={len(vec)}")
     except Exception as exc:  # noqa: BLE001
         record("Embedding", "FAIL", f"{type(exc).__name__}: {exc}")
 

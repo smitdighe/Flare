@@ -25,14 +25,82 @@ _model: Any = None
 _PROGRESS_EVERY = 25
 
 
+class OnnxEmbedder:
+    """all-MiniLM-L6-v2 through chromadb's bundled ONNX runtime.
+
+    Same weights and the same 384-dim output as the sentence-transformers build,
+    without importing torch. That matters because torch is ~400MB of resident
+    memory on its own; on top of the ~130MB the app already holds it puts a
+    512MB container over the line and the process is OOM-killed during startup,
+    long before it can answer a health check.
+
+    Only ``encode`` is implemented, because ``encode`` is the entire surface the
+    rest of the codebase uses of a SentenceTransformer. Keeping the signature
+    identical (including the ignored ``show_progress_bar``) is what lets
+    :func:`get_embedding_model` swap backends without any caller knowing.
+    """
+
+    def __init__(self) -> None:
+        from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
+
+        self._fn = ONNXMiniLM_L6_V2()
+        # Instance-level override of the class attribute chromadb downloads into.
+        # Its default is ~/.cache; pinning it under the app's own data directory
+        # means a build step that warms the model leaves the weights where the
+        # runtime is certain to find them.
+        self._fn.DOWNLOAD_PATH = get_settings().embedding_cache_dir
+        # Embed one throwaway string so construction really does leave the model
+        # resident. chromadb downloads the weights and builds the ORT session
+        # lazily, on first call — without this the startup warmup would return in
+        # milliseconds having loaded nothing, and the whole cost would land in
+        # the first alert's retrieve node, which is exactly what the warmup
+        # exists to prevent. Constructing a SentenceTransformer loads eagerly, so
+        # this is also what keeps the two backends behaving the same way.
+        self._fn(["warmup"])
+
+    def encode(self, texts: Any, show_progress_bar: bool = False) -> Any:  # noqa: ARG002
+        import numpy as np
+
+        if isinstance(texts, str):
+            return np.asarray(self._fn([texts])[0])
+        return np.asarray(self._fn(list(texts)))
+
+
 def get_embedding_model() -> Any:
-    """Cached sentence-transformers model (settings.EMBEDDING_MODEL)."""
+    """Cached embedding model for settings.EMBEDDING_BACKEND.
+
+    Returns an object exposing ``encode(texts) -> ndarray`` regardless of which
+    backend is configured.
+    """
     global _model
     if _model is None:
-        from sentence_transformers import SentenceTransformer
+        settings = get_settings()
+        if settings.embedding_backend == "sentence-transformers":
+            from sentence_transformers import SentenceTransformer
 
-        _model = SentenceTransformer(get_settings().embedding_model)
+            _model = SentenceTransformer(settings.embedding_model)
+        else:
+            _model = OnnxEmbedder()
     return _model
+
+
+def reset_embedding_model() -> None:
+    """Drop the cached model (tests, and switching backends at runtime)."""
+    global _model
+    _model = None
+
+
+def embedding_model_id() -> str:
+    """Identifier stamped into the collection metadata and /health/deep.
+
+    Names the BACKEND as well as the model, because "which weights built this
+    index" is the question that matters when a rebuilt index stops matching the
+    queries being run against it.
+    """
+    settings = get_settings()
+    if settings.embedding_backend == "sentence-transformers":
+        return settings.embedding_model
+    return "onnx/all-MiniLM-L6-v2"
 
 
 def corpus_hash(chunks: list[Chunk]) -> str:
@@ -100,7 +168,7 @@ async def build_index(force: bool = False, collection: Any = None) -> dict[str, 
             metadata={
                 "corpus_hash": chash,
                 "built_at": built_at,
-                "model": get_settings().embedding_model,
+                "model": embedding_model_id(),
                 "techniques": len(docs),
             },
         )
@@ -116,7 +184,7 @@ async def build_index(force: bool = False, collection: Any = None) -> dict[str, 
     return {
         "documents": await asyncio.to_thread(col.count),
         "techniques": len(docs),
-        "model": get_settings().embedding_model,
+        "model": embedding_model_id(),
         "built_at": built_at,
         "corpus_hash": chash,
     }

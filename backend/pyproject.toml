@@ -14,8 +14,13 @@ dependencies = [
     "langchain-core",
     "groq",
     "google-generativeai",
+    # chromadb pulls onnxruntime + tokenizers + tqdm, which is the whole
+    # embedding stack app/rag/indexer.py needs. sentence-transformers (and so
+    # torch) is deliberately NOT a runtime dependency: it is ~400MB of resident
+    # memory for weights the ONNX build already provides, and the deploy target
+    # has 512MB total. It lives in the `dev` extra for the slow tests and for
+    # anyone setting EMBEDDING_BACKEND=sentence-transformers locally.
     "chromadb",
-    "sentence-transformers",
     "httpx",
     "tenacity",
     "aiolimiter",
@@ -25,8 +30,6 @@ dependencies = [
     "sse-starlette",
     "structlog",
     "orjson",
-    "pandas",
-    "pyarrow",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +41,9 @@ dev = [
     "ruff",
     "mypy",
     "ipython",
+    # torch-backed embedding path. Not a runtime dependency — see the note in
+    # [project].dependencies.
+    "sentence-transformers",
     # RSS sampling in tests/integration/test_load.py. Present transitively today;
     # declared because a load test that silently skips is worse than no test.
     "psutil",
