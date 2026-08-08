@@ -1,0 +1,87 @@
+@layer components {
+  .reveal-block {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+    transition: opacity var(--motion-reveal) var(--ease-command), transform var(--motion-reveal) var(--ease-command);
+  }
+
+  .reveal-block.is-visible {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .landing-hero-grid {
+    position: relative;
+  }
+
+  .landing-hero-grid::after {
+    position: absolute;
+    inset: 12% 0 auto;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 149, 0, 0.24), transparent);
+    content: "";
+    pointer-events: none;
+    animation: hero-scan 8s ease-in-out infinite;
+  }
+
+  .pipeline-card {
+    position: relative;
+    overflow: hidden;
+    transition: background-color var(--motion-state) ease, transform var(--motion-state) var(--ease-command), border-color var(--motion-state) ease;
+  }
+
+  .pipeline-card::after {
+    position: absolute;
+    inset: 0 auto 0 -100%;
+    width: 70%;
+    background: linear-gradient(90deg, transparent, rgba(255, 149, 0, 0.08), transparent);
+    content: "";
+    pointer-events: none;
+    transition: transform 520ms var(--ease-command);
+  }
+
+  .pipeline-card:hover {
+    z-index: 1;
+    border-color: rgba(255, 149, 0, 0.42);
+    background: rgba(255, 149, 0, 0.035);
+    transform: translate3d(0, -5px, 0);
+  }
+
+  .pipeline-card:hover::after {
+    transform: translate3d(245%, 0, 0);
+  }
+
+  .preview-shell {
+    transition: transform var(--motion-state) var(--ease-command), box-shadow var(--motion-state) var(--ease-command);
+  }
+
+  .preview-shell:hover {
+    transform: translate3d(0, -4px, 0);
+    box-shadow: 20px 22px 0 rgba(255, 149, 0, 0.1);
+  }
+
+  @keyframes hero-scan {
+    0%, 24% { opacity: 0; transform: translate3d(-4%, 0, 0); }
+    42% { opacity: 1; }
+    70%, 100% { opacity: 0; transform: translate3d(104%, 0, 0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal-block {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+
+    .landing-hero-grid::after,
+    .pipeline-card::after {
+      animation: none;
+      transition: none;
+    }
+
+    .pipeline-card,
+    .preview-shell {
+      transition: none;
+    }
+  }
+}
