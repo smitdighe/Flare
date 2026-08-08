@@ -2,7 +2,7 @@
 
 Multi-agent security alert triage engine. Classifies, enriches, and reasons over IDS alerts in real time using a LangGraph pipeline backed by Groq, AbuseIPDB, VirusTotal, and Gemini with MITRE ATT&CK RAG grounding.
 
-![Pipeline](https://img.shields.io/badge/pipeline-classify→enrich→reason-ff9500) ![Python](https://img.shields.io/badge/python-3.11+-3776ab) ![React](https://img.shields.io/badge/react-19-61dafb)
+![Pipeline](https://img.shields.io/badge/pipeline-classify→enrich→reason-ff9500) ![Python](https://img.shields.io/badge/python-3.11+-3776ab) ![React](https://img.shields.io/badge/react-19-61dafb) ![Tests](https://img.shields.io/badge/tests-33%20passing-brightgreen)
 
 ---
 
@@ -12,9 +12,10 @@ Multi-agent security alert triage engine. Classifies, enriches, and reasons over
 ┌──────────────────────────────────────────────────────┐
 │                   Frontend (React)                    │
 │  Vite + Tailwind + Three.js + Motion                 │
-│  SSE live feed · Command palette · Threat topology   │
+│  WebSocket live feed · Command palette · 3D topology │
+│  Dark/Light theme · Settings · Auth with refresh     │
 └──────────────────────┬───────────────────────────────┘
-                       │ EventSource + REST
+                       │ WebSocket + REST
 ┌──────────────────────▼───────────────────────────────┐
 │                  Backend (FastAPI)                     │
 │                                                       │
@@ -27,53 +28,61 @@ Multi-agent security alert triage engine. Classifies, enriches, and reasons over
 │        ▼              ▼               ▼               │
 │   Severity +      IOC rep +     MITRE technique +    │
 │   attack type     VT verdict    remediation steps    │
+│                                                       │
+│   ┌─────────────────────────────────────────────┐    │
+│   │  SQLite + SQLAlchemy + Alembic migrations   │    │
+│   │  APScheduler background jobs                │    │
+│   │  WebSocket + SSE real-time streams          │    │
+│   └─────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────┘
 ```
 
 ## Features
 
-- **Real-time SSE stream** -- alerts flow in via Server-Sent Events with configurable speed (fast/balanced/thorough)
+### Core Pipeline
 - **Three-stage pipeline** -- classify (Groq/Llama), enrich (AbuseIPDB + VirusTotal), reason (Gemini + MITRE RAG)
-- **Live dashboard** -- alert feed, threat clusters, signal topology, health metrics, evaluation panel
-- **Command palette** -- `Ctrl+K` / `Cmd+K` for quick navigation and actions
-- **Keyboard navigation** -- `j`/`k` to move, `Enter` to inspect, `Escape` to dismiss
-- **Pause/resume** -- control the live stream without losing existing alerts
+- **Real-time streaming** -- WebSocket primary, SSE fallback, configurable speed
 - **Eval harness** -- 24 labeled ground-truth alerts with confusion matrix and F1 scoring
-- **Provider benchmark** -- compare Groq (fast) vs Gemini (quality) on the same alert side by side
+- **Provider benchmark** -- compare Groq (fast) vs Gemini (quality) on the same alert
 
-## New Features (v2)
+### Dashboard
+- **Live alert feed** -- real-time alert table with severity indicators
+- **3D threat topology** -- Three.js network graph of source IPs
+- **Command palette** -- `Ctrl+K` / `Cmd+K` for quick navigation
+- **Keyboard navigation** -- `j`/`k` to move, `Enter` to inspect, `Escape` to dismiss
+- **Dark/Light theme** -- toggle with system preference detection
 
-### Authentication & Security
-- **JWT authentication** -- secure login with email/password
+### Authentication & Authorization
+- **JWT authentication** -- access tokens (30min) + refresh tokens (7-day) with auto-refresh
 - **Role-based access control** -- admin, analyst, viewer roles
-- **Rate limiting** -- 60 requests/minute per IP
-- **Input sanitization** -- XSS and injection prevention
-- **Audit logging** -- track all user actions
+- **Viewer enforcement** -- viewers can read but not mutate rules/playbooks
+- **User management** -- admin can list, update, deactivate users
+- **Password change** -- users can change their own password
 
 ### Data Persistence
 - **SQLite database** -- zero-config, file-based persistence
 - **SQLAlchemy ORM** -- type-safe database queries
-- **Auto-migration** -- tables created on startup
+- **Alembic migrations** -- version-controlled schema changes
 
-### Notifications
+### Rules & Playbooks
+- **Rule engine** -- custom alert rules with 9 condition operators
+- **Playbook templates** -- step-by-step incident response workflows (manual/auto/approval)
+- **Execution tracking** -- track playbook progress and completion
+
+### Notifications & Export
 - **Email notifications** -- SMTP-based email alerts
 - **Slack integration** -- webhook-based Slack notifications
-- **Configurable preferences** -- per-user notification settings
-
-### Export & Reporting
 - **CSV export** -- download filtered alerts as CSV
-- **PDF reports** -- generate formatted PDF reports with charts
-- **Summary reports** -- executive summary with severity breakdown
+- **PDF reports** -- generate formatted PDF reports
 
-### Custom Rules
-- **Rule engine** -- create custom alert rules with conditions/actions
-- **Condition operators** -- equals, contains, regex, greater_than, etc.
-- **Action types** -- set_severity, add_tag, set_attack_type
-
-### Incident Playbooks
-- **Playbook templates** -- step-by-step incident response workflows
-- **Execution tracking** -- track playbook progress and completion
-- **Manual/auto steps** -- support for both manual and automated steps
+### Operations
+- **Background jobs** -- APScheduler with periodic cleanup, metrics aggregation, audit log rotation
+- **Multi-tenancy** -- tenant model for organization isolation
+- **Rate limiting** -- 60 requests/minute per IP
+- **Input sanitization** -- XSS and injection prevention
+- **Audit logging** -- track all user actions
+- **Request IDs** -- X-Request-ID header on all responses
+- **Structured errors** -- consistent JSON error responses
 
 ## Quick Start
 
@@ -86,7 +95,7 @@ Multi-agent security alert triage engine. Classifies, enriches, and reasons over
 ### 1. Clone
 
 ```bash
-git clone https://github.com/<you>/flare.git
+git clone https://github.com/savai15/flare.git
 cd flare
 ```
 
@@ -116,6 +125,7 @@ VIRUSTOTAL_API_KEY=...
 # Terminal 1 -- Backend
 cd backend
 pip install -r requirements.txt
+python -m alembic upgrade head
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Terminal 2 -- Frontend
@@ -132,214 +142,189 @@ Default admin account:
 - Email: `admin@flare.dev`
 - Password: `admin123`
 
+## Testing
+
+### Backend (pytest)
+
+```bash
+cd backend
+python -m pytest tests/ -v
+```
+
+27 tests covering auth, rules, playbooks, and RBAC enforcement.
+
+### Frontend (Playwright)
+
+```bash
+cd frontend
+npx playwright test
+```
+
+6 E2E tests covering landing page, auth flow, protected routes, and 404.
+
 ## Project Structure
 
 ```
 flare/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI app + endpoints
+│   │   ├── main.py              # FastAPI app + all endpoints + WS
 │   │   ├── config.py            # Pipeline speed/toggle config
 │   │   ├── models.py            # Pydantic models
-│   │   ├── models_db.py         # SQLAlchemy ORM models
+│   │   ├── models_db.py         # SQLAlchemy ORM (9 models)
 │   │   ├── database.py          # SQLite engine + session
-│   │   ├── auth.py              # JWT + password hashing
-│   │   ├── auth_router.py       # Auth endpoints
+│   │   ├── auth.py              # JWT + bcrypt + dependencies
+│   │   ├── auth_router.py       # Auth + user management endpoints
 │   │   ├── store.py             # SQL-backed alert store
-│   │   ├── health.py            # API key health checker (60s cache)
-│   │   ├── stream.py            # SSE stream manager (pause/resume)
-│   │   ├── eval.py              # Eval harness with confusion matrix
-│   │   ├── security.py          # Rate limiting + input sanitization
-│   │   ├── audit.py             # Audit logging utilities
+│   │   ├── health.py            # API key health checker
+│   │   ├── stream.py            # SSE stream manager
+│   │   ├── eval.py              # Eval harness
+│   │   ├── security.py          # Rate limiting + sanitization
+│   │   ├── audit.py             # Audit logging
 │   │   ├── audit_router.py      # Audit log endpoints
-│   │   ├── notification_router.py # Notification preferences
-│   │   ├── export_router.py     # CSV/PDF export endpoints
-│   │   ├── rules_router.py      # Custom rules CRUD
-│   │   ├── playbooks_router.py  # Playbooks CRUD + execution
+│   │   ├── notification_router.py
+│   │   ├── export_router.py
+│   │   ├── rules_router.py
+│   │   ├── playbooks_router.py
+│   │   ├── jobs_router.py       # Background job management
+│   │   ├── tenants_router.py    # Multi-tenant management
+│   │   ├── scheduler.py         # APScheduler background tasks
+│   │   ├── error_handlers.py    # Structured errors + request IDs
 │   │   ├── data/
-│   │   │   ├── sample_alerts.py # Fake alert generator
-│   │   │   ├── cicids_loader.py # CICIDS2017 dataset loader
-│   │   │   └── generator.py     # Shared alert generator
 │   │   ├── pipeline/
-│   │   │   ├── graph.py         # LangGraph pipeline definition
-│   │   │   ├── classify.py      # Stage 1: Groq/Llama classifier
-│   │   │   ├── enrich.py        # Stage 2: AbuseIPDB + VT enrichment
-│   │   │   ├── reason.py        # Stage 3: Gemini + MITRE RAG reasoning
-│   │   │   ├── benchmark.py     # Groq vs Gemini benchmark
-│   │   │   └── virustotal.py    # VirusTotal API client
 │   │   ├── rag/
-│   │   │   ├── retriever.py     # TF-IDF retriever over MITRE corpus
-│   │   │   └── mitre_corpus.py  # 30 MITRE ATT&CK techniques
 │   │   ├── notifications/
-│   │   │   ├── email.py         # SMTP email sender
-│   │   │   ├── slack.py         # Slack webhook sender
-│   │   │   └── dispatcher.py    # Fan-out to channels
 │   │   ├── export/
-│   │   │   ├── csv_export.py    # CSV generation
-│   │   │   └── pdf_export.py    # PDF report generation
 │   │   ├── rules/
-│   │   │   └── engine.py        # Rule evaluation engine
 │   │   └── playbooks/
-│   │       └── engine.py        # Playbook execution engine
+│   ├── tests/
+│   │   ├── conftest.py          # Fixtures + test DB setup
+│   │   ├── test_auth.py
+│   │   ├── test_rules.py
+│   │   └── test_playbooks.py
+│   ├── alembic/                 # Database migrations
+│   │   ├── env.py
+│   │   └── versions/
+│   ├── alembic.ini
 │   ├── requirements.txt
-│   ├── .env.example
-│   └── .env                     # (not committed)
+│   └── .env.example
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx              # Root component with React Router
-│   │   ├── main.jsx             # Entry point + AuthProvider
+│   │   ├── App.jsx
+│   │   ├── main.jsx
 │   │   ├── contexts/
-│   │   │   └── AuthContext.jsx  # Authentication state
+│   │   │   ├── AuthContext.jsx  # JWT + refresh + auto-refresh
+│   │   │   └── ThemeContext.jsx # Dark/Light theme
 │   │   ├── pages/
-│   │   │   ├── LoginPage.jsx    # Login form
-│   │   │   ├── RegisterPage.jsx # Registration form
-│   │   │   └── DashboardPage.jsx # Protected dashboard
-│   │   ├── components/
-│   │   │   ├── DashboardView.jsx    # Dashboard shell
-│   │   │   ├── CommandBar.jsx       # Top navigation bar + logout
-│   │   │   ├── SideRail.jsx         # Left navigation rail
-│   │   │   ├── WorkspacePanel.jsx   # Main content area
-│   │   │   ├── DashboardHeader.jsx  # Stats header
-│   │   │   ├── FilterStrip.jsx      # Severity/type filters
-│   │   │   ├── OperationsRail.jsx   # Right sidebar
-│   │   │   ├── AlertTable.jsx       # Alert list table
-│   │   │   ├── AlertDetailDrawer.jsx # Alert detail slide-out
-│   │   │   ├── CommandPalette.jsx   # Ctrl+K command palette
-│   │   │   ├── ErrorBoundary.jsx    # React error boundary
-│   │   │   ├── ProtectedRoute.jsx   # Auth guard
-│   │   │   ├── FlareLanding.jsx     # Landing page
-│   │   │   ├── SignalTopology.jsx   # 2D network graph
-│   │   │   ├── ThreeTopology.jsx    # 3D topology (Three.js)
-│   │   │   ├── ParticleField.jsx    # Background particle animation
-│   │   │   ├── ShaderBackdrop.jsx   # WebGL shader backdrop
-│   │   │   ├── PipelineStageInspector.jsx # Pipeline detail modal
-│   │   │   ├── TelemetrySparkline.jsx # Mini sparkline chart
-│   │   │   ├── AnimatedNumber.jsx   # Animated counter
-│   │   │   ├── MetricBlock.jsx      # Metric display block
-│   │   │   ├── StatusDot.jsx        # Status indicator dot
-│   │   │   └── Icon.jsx             # Material icon wrapper
+│   │   │   ├── LoginPage.jsx
+│   │   │   ├── RegisterPage.jsx
+│   │   │   ├── DashboardPage.jsx
+│   │   │   └── SettingsPage.jsx # Profile/Security/Appearance
 │   │   ├── hooks/
-│   │   │   ├── useMotionPointer.js  # Mouse position tracker
-│   │   │   └── useScrollProgress.js # Scroll progress hook
-│   │   ├── data/
-│   │   │   └── mockAlerts.js        # Mock alert data
+│   │   │   ├── useAlertStream.js # WebSocket + SSE fallback
+│   │   │   ├── useMotionPointer.js
+│   │   │   └── useScrollProgress.js
+│   │   ├── components/ (25 components)
 │   │   └── styles/
-│   │       ├── tokens.css           # Design tokens
-│   │       ├── app.css              # Global styles
-│   │       ├── landing.css          # Landing page styles
-│   │       └── dashboard.css        # Dashboard styles
+│   ├── e2e/
+│   │   └── auth.spec.js         # Playwright E2E tests
+│   ├── playwright.config.js
 │   ├── package.json
 │   └── vite.config.js
-├── start.bat                   # One-click launcher (Windows)
+├── start.bat
 ├── .gitignore
 └── README.md
 ```
 
-## API Endpoints
+## API Reference
+
+Full interactive docs at `/docs` (Swagger) or `/redoc` (ReDoc).
 
 ### Authentication
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/v1/auth/register` | Register new user |
-| `POST` | `/api/v1/auth/login` | Login (returns JWT) |
-| `POST` | `/api/v1/auth/refresh` | Refresh access token |
-| `GET` | `/api/v1/auth/me` | Get current user |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/api/v1/auth/register` | -- | Register new user |
+| `POST` | `/api/v1/auth/login` | -- | Login (returns JWT) |
+| `POST` | `/api/v1/auth/refresh` | -- | Refresh access token |
+| `GET` | `/api/v1/auth/me` | JWT | Get current user |
+| `PUT` | `/api/v1/auth/profile` | JWT | Update profile |
+| `POST` | `/api/v1/auth/change-password` | JWT | Change password |
+| `GET` | `/api/v1/auth/users` | Admin | List all users |
+| `PUT` | `/api/v1/auth/users/{id}` | Admin | Update user |
+| `DELETE` | `/api/v1/auth/users/{id}` | Admin | Deactivate user |
 
-### Alerts
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/stream` | SSE alert stream |
-| `GET` | `/api/v1/alerts` | List alerts (filter by severity, attack_type, search) |
-| `GET` | `/api/v1/alerts/{id}` | Alert detail with full pipeline trace |
-| `GET` | `/api/v1/alerts/correlated/list` | Source IP correlation clusters |
-| `GET` | `/api/v1/stats` | Dashboard statistics |
+### Alerts & Stream
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/v1/stream` | JWT | SSE alert stream |
+| `WS` | `/api/v1/ws/stream?token=` | JWT | WebSocket alert stream |
+| `GET` | `/api/v1/alerts` | JWT | List alerts |
+| `GET` | `/api/v1/alerts/{id}` | JWT | Alert detail |
+| `GET` | `/api/v1/stats` | JWT | Dashboard stats |
 
-### Pipeline
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/health` | API key health status (60s cached) |
-| `GET` | `/api/v1/eval` | Eval harness results |
-| `GET` | `/api/v1/benchmark` | Groq vs Gemini benchmark |
-| `POST` | `/api/v1/seed` | Seed N alerts into the store |
-| `POST` | `/api/v1/stream/pause` | Pause the stream |
-| `POST` | `/api/v1/stream/resume` | Resume the stream |
-| `POST` | `/api/v1/stream/config` | Update pipeline config (speed, toggles) |
+### Rules, Playbooks, Export
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET/POST/PUT/DELETE` | `/api/v1/rules/*` | JWT | Rule CRUD |
+| `GET/POST/PUT/DELETE` | `/api/v1/playbooks/*` | JWT | Playbook CRUD + execution |
+| `GET` | `/api/v1/export/alerts/csv` | JWT | CSV export |
+| `GET` | `/api/v1/export/alerts/pdf` | JWT | PDF export |
 
-### Export
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/export/alerts/csv` | Download alerts as CSV |
-| `GET` | `/api/v1/export/alerts/pdf` | Download alerts as PDF report |
-
-### Rules
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/rules` | List user's rules |
-| `POST` | `/api/v1/rules` | Create rule |
-| `PUT` | `/api/v1/rules/{id}` | Update rule |
-| `DELETE` | `/api/v1/rules/{id}` | Delete rule |
-
-### Playbooks
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/playbooks` | List user's playbooks |
-| `POST` | `/api/v1/playbooks` | Create playbook |
-| `PUT` | `/api/v1/playbooks/{id}` | Update playbook |
-| `DELETE` | `/api/v1/playbooks/{id}` | Delete playbook |
-| `POST` | `/api/v1/playbooks/{id}/execute` | Start playbook execution |
-| `GET` | `/api/v1/playbooks/executions/{id}` | Get execution status |
-| `POST` | `/api/v1/playbooks/executions/{id}/steps/{step}` | Complete step |
-
-### Notifications
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/notifications/preferences` | List notification preferences |
-| `POST` | `/api/v1/notifications/preferences` | Create/update preference |
-| `DELETE` | `/api/v1/notifications/preferences/{id}` | Delete preference |
-
-### Audit
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/audit/logs` | List audit logs (admin) |
-| `GET` | `/api/v1/audit/logs/me` | Current user's audit logs |
+### Operations
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/v1/jobs` | Admin | List background jobs |
+| `POST` | `/api/v1/jobs/{id}/trigger` | Admin | Trigger a job |
+| `GET/POST/DELETE` | `/api/v1/tenants/*` | Admin | Tenant management |
+| `GET` | `/api/v1/audit/logs` | Admin | Audit logs |
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `GROQ_API_KEY` | Yes | -- | Groq API key for classification |
-| `GEMINI_API_KEY` | Yes | -- | Google Gemini API key for reasoning |
-| `ABUSEIPDB_API_KEY` | No | -- | AbuseIPDB key for IP reputation |
-| `VIRUSTOTAL_API_KEY` | No | -- | VirusTotal key for IP/hash lookups |
-| `FLARE_DATA_MODE` | No | `hybrid` | `fake`, `cicids`, or `hybrid` |
-| `CICIDS_CSV_PATH` | No | -- | Path to CICIDS2017 CSV (hybrid mode) |
-| `CORS_ORIGINS` | No | `*` | Comma-separated allowed origins |
-| `DATABASE_URL` | No | `sqlite:///flare.db` | Database connection string |
-| `JWT_SECRET_KEY` | No | `flare-dev-secret...` | JWT signing secret |
-| `SMTP_HOST` | No | -- | SMTP server for email notifications |
-| `SMTP_PORT` | No | `587` | SMTP port |
-| `SMTP_USER` | No | -- | SMTP username |
-| `SMTP_PASS` | No | -- | SMTP password |
+| `GROQ_API_KEY` | Yes | -- | Groq API key |
+| `GEMINI_API_KEY` | Yes | -- | Gemini API key |
+| `ABUSEIPDB_API_KEY` | No | -- | AbuseIPDB key |
+| `VIRUSTOTAL_API_KEY` | No | -- | VirusTotal key |
+| `DATABASE_URL` | No | `sqlite:///flare.db` | Database URL |
+| `JWT_SECRET_KEY` | No | `flare-dev-secret...` | JWT secret |
+| `CORS_ORIGINS` | No | `*` | Allowed origins |
+| `SMTP_HOST/PORT/USER/PASS` | No | -- | Email notifications |
+| `SLACK_WEBHOOK_URL` | No | -- | Slack notifications |
 
 ## Security
 
-- **JWT authentication** on all protected endpoints
-- **Role-based access control** (admin/analyst/viewer)
-- **Rate limiting** (60 req/min per IP)
-- **Input sanitization** (XSS/injection prevention)
-- **Audit logging** for all state-changing operations
-- **CORS configuration** (configurable origins)
-- **Password hashing** with bcrypt
-- **No secrets in git** (.env in .gitignore)
+- JWT auth with auto-refresh on all protected endpoints
+- Role-based access control (admin/analyst/viewer)
+- Viewer role enforcement on mutate endpoints
+- Rate limiting (60 req/min per IP)
+- Input sanitization (XSS/injection prevention)
+- Audit logging for all state-changing operations
+- Request IDs (X-Request-ID) for tracing
+- Structured JSON error responses
+- Bcrypt password hashing
+- No secrets in git (.env in .gitignore)
 
-## Tech Stack
+## Changelog
 
-- **Backend:** Python, FastAPI, Uvicorn, LangGraph, Pydantic, SQLAlchemy, SQLite
-- **LLMs:** Groq (Llama 3.1 8B), Google Gemini 1.5 Flash
-- **Enrichment:** AbuseIPDB, VirusTotal
-- **RAG:** TF-IDF + cosine similarity over 30 MITRE ATT&CK techniques
-- **Frontend:** React 19, Vite 8, Tailwind CSS 4, Three.js, Motion (Framer), React Router 7
-- **Auth:** JWT (python-jose), bcrypt, HTTPBearer
+### v0.2 (Phase 3+4)
+- Auth hardening: refresh tokens, auto-refresh, user management, viewer enforcement
+- WebSocket real-time streaming with SSE fallback
+- Background tasks: APScheduler with cleanup, metrics, audit rotation
+- Dark/Light theme toggle with system preference detection
+- User settings page (Profile, Security, Appearance)
+- Alembic database migrations
+- Multi-tenancy support
+- 27 backend tests (pytest) + 6 E2E tests (Playwright)
+- OpenAPI documentation with tags and examples
+- Structured error handling and request ID middleware
+
+### v0.1 (Phase 1+2)
+- Initial release with 3-stage AI pipeline
+- SQLite persistence with SQLAlchemy ORM
+- JWT authentication with RBAC
+- Rules engine, playbooks, notifications, export
+- React dashboard with 3D topology
 
 ## License
 
