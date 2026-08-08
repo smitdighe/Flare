@@ -242,8 +242,8 @@
     animation-delay: calc(var(--preview-index, 0) * 100ms + 180ms);
   }
 
-  .signal-grid:hover,
-  .signal-grid:focus-within {
+  .signal-grid:hover > .scanlines,
+  .signal-grid:focus-within > .scanlines {
     animation-duration: 8s;
   }
 }
@@ -434,8 +434,9 @@
   .drawer-section-toggle:hover { color: var(--paper-50); }
   .three-topology-layer { position: absolute; inset: 0; z-index: 1; pointer-events: auto; opacity: 0.66; }
   .topology-canvas { position: absolute; inset: 0; height: 100%; width: 100%; }
-  .topology-hit { z-index: 2; transform-origin: center; transition: filter var(--motion-fast) ease, transform var(--motion-state) var(--ease-command); }
-  .topology-hit:hover, .topology-hit:focus-visible { filter: drop-shadow(0 0 7px rgba(255, 149, 0, 0.6)); transform: translate(-50%, -50%) scale(1.08); outline: none; }
+  .topology-hit { z-index: 2; transform-origin: center; transition: filter var(--motion-fast) ease; }
+  .topology-hit:hover, .topology-hit:focus-visible { filter: drop-shadow(0 0 7px rgba(255, 149, 0, 0.6)); outline: none; }
+  .topology-hit:hover .topology-node, .topology-hit:focus-visible .topology-node { transform: scale(1.12); }
   .three-topology-layer + svg { z-index: 1; pointer-events: none; }
   @keyframes inspector-enter { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 }

@@ -63,6 +63,24 @@
     --content-max: 1760px;
   }
 
+  .light-theme {
+    --ink-950: #f8f8f8;
+    --ink-900: #ffffff;
+    --ink-850: #f0f0f0;
+    --ink-800: #e8e8e8;
+    --line: #e0e0e0;
+    --line-strong: #c8c8c8;
+    --paper-50: #1a1a1a;
+    --ash-400: #666666;
+    --ash-600: #888888;
+    --amber-500: #d48200;
+    --amber-300: #e8a020;
+    --red-500: #d43020;
+    --green-500: #20a840;
+    --cyan-500: #2090c0;
+    --yellow-500: #c0a000;
+  }
+
   * {
     box-sizing: border-box;
   }
@@ -70,6 +88,22 @@
   html {
     background: var(--ink-950);
   }
+
+  .light-theme html,
+  .light-theme body {
+    background: var(--ink-950);
+    color: var(--paper-50);
+  }
+
+  .light-theme .bg-ink-950 { background-color: var(--ink-950); }
+  .light-theme .bg-ink-900 { background-color: var(--ink-900); }
+  .light-theme .bg-ink-850 { background-color: var(--ink-850); }
+  .light-theme .bg-ink-800 { background-color: var(--ink-800); }
+  .light-theme .text-paper { color: var(--paper-50); }
+  .light-theme .text-ash { color: var(--ash-400); }
+  .light-theme .text-ash-dark { color: var(--ash-600); }
+  .light-theme .border-line { border-color: var(--line); }
+  .light-theme .border-line-strong { border-color: var(--line-strong); }
 
   body {
     min-width: 320px;

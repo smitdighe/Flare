@@ -268,6 +268,439 @@ function CorrelatedPanel({ alerts, onFilterChange }) {
   );
 }
 
+function SeverityChart({ alerts }) {
+  const counts = { high: 0, medium: 0, low: 0 };
+  alerts.forEach((a) => { if (counts[a.severity] !== undefined) counts[a.severity] += 1; });
+  const total = alerts.length || 1;
+  const segments = [
+    { label: 'HIGH', count: counts.high, color: '#e94560', pct: (counts.high / total) * 100 },
+    { label: 'MED', count: counts.medium, color: '#f59e0b', pct: (counts.medium / total) * 100 },
+    { label: 'LOW', count: counts.low, color: '#30d158', pct: (counts.low / total) * 100 },
+  ];
+
+  let offset = 0;
+  const radius = 40;
+  const circumference = 2 * Math.PI * radius;
+
+  return (
+    <section className="dashboard-panel p-4">
+      <div className="eyebrow text-ash-dark">Severity distribution</div>
+      <div className="mt-4 flex items-center gap-6">
+        <div className="relative">
+          <svg width="110" height="110" viewBox="0 0 100 100">
+            {segments.map((seg) => {
+              const dash = (seg.pct / 100) * circumference;
+              const el = (
+                <circle
+                  key={seg.label}
+                  cx="50" cy="50" r={radius}
+                  fill="none"
+                  stroke={seg.color}
+                  strokeWidth="12"
+                  strokeDasharray={`${dash} ${circumference - dash}`}
+                  strokeDashoffset={-offset}
+                  transform="rotate(-90 50 50)"
+                  style={{ transition: 'stroke-dasharray 0.5s ease' }}
+                />
+              );
+              offset += dash;
+              return el;
+            })}
+            <text x="50" y="48" textAnchor="middle" fill="#e0e0e0" fontSize="14" fontWeight="bold" fontFamily="monospace">{total}</text>
+            <text x="50" y="60" textAnchor="middle" fill="#666" fontSize="7" fontFamily="monospace">ALERTS</text>
+          </svg>
+        </div>
+        <div className="space-y-2">
+          {segments.map((seg) => (
+            <div key={seg.label} className="flex items-center gap-3 font-mono-ui text-[10px]">
+              <span className="h-2 w-2 rounded-full" style={{ background: seg.color }} />
+              <span className="w-10 text-ash-dark">{seg.label}</span>
+              <span className="text-paper">{seg.count}</span>
+              <span className="text-ash-dark">{seg.pct.toFixed(0)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ExportPanel({ filters }) {
+  const [exporting, setExporting] = useState(null);
+
+  const handleExport = async (format) => {
+    setExporting(format);
+    const params = new URLSearchParams();
+    if (filters.severity) params.set('severity', filters.severity);
+    if (filters.attack_type) params.set('attack_type', filters.attack_type);
+    if (filters.search) params.set('search', filters.search);
+    params.set('limit', '500');
+
+    try {
+      const token = localStorage.getItem('flare_token');
+      const res = await fetch(`${API_BASE}/api/v1/export/alerts/${format}?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `flare_alerts.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export error:', err);
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  return (
+    <section className="dashboard-panel p-4">
+      <div className="eyebrow text-ash-dark">Export data</div>
+      <div className="mt-4 space-y-3">
+        <button
+          type="button"
+          onClick={() => handleExport('csv')}
+          disabled={exporting === 'csv'}
+          className="flex w-full items-center gap-3 border border-line-strong bg-ink-900 px-4 py-3 font-mono-ui text-[10px] text-paper transition-colors hover:border-green/50 hover:bg-green/5 disabled:opacity-50"
+        >
+          <span className="text-green">CSV</span>
+          <span className="text-ash-dark">{exporting === 'csv' ? 'Exporting...' : 'Download filtered alerts as CSV'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleExport('pdf')}
+          disabled={exporting === 'pdf'}
+          className="flex w-full items-center gap-3 border border-line-strong bg-ink-900 px-4 py-3 font-mono-ui text-[10px] text-paper transition-colors hover:border-red/50 hover:bg-red/5 disabled:opacity-50"
+        >
+          <span className="text-red">PDF</span>
+          <span className="text-ash-dark">{exporting === 'pdf' ? 'Exporting...' : 'Generate formatted PDF report'}</span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function RulesPanel() {
+  const [rules, setRules] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', description: '', conditions: { logic: 'AND', conditions: [{ field: 'severity', operator: 'equals', value: 'high' }] }, actions: [{ type: 'set_severity', value: 'high' }] });
+  const [error, setError] = useState('');
+
+  const fetchRules = () => {
+    const token = localStorage.getItem('flare_token');
+    fetch(`${API_BASE}/api/v1/rules`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => { setRules(d.rules || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchRules(); }, []);
+
+  const handleCreate = async () => {
+    setError('');
+    const token = localStorage.getItem('flare_token');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/rules`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Failed'); }
+      setShowForm(false);
+      setForm({ name: '', description: '', conditions: { logic: 'AND', conditions: [{ field: 'severity', operator: 'equals', value: 'high' }] }, actions: [{ type: 'set_severity', value: 'high' }] });
+      fetchRules();
+    } catch (err) { setError(err.message); }
+  };
+
+  const handleDelete = async (id) => {
+    const token = localStorage.getItem('flare_token');
+    await fetch(`${API_BASE}/api/v1/rules/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    fetchRules();
+  };
+
+  return (
+    <section className="dashboard-panel">
+      <div className="flex items-center justify-between border-b border-line-strong px-4 py-4">
+        <div>
+          <div className="eyebrow text-ash-dark">Custom rules</div>
+          <h2 className="mt-1 text-base font-semibold text-paper">Alert rules</h2>
+        </div>
+        <button type="button" onClick={() => setShowForm(!showForm)} className="font-mono-ui text-[10px] text-amber hover:text-amber/80">
+          {showForm ? 'Cancel' : '+ New Rule'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="border-b border-line p-4 space-y-3">
+          {error && <div className="font-mono-ui text-[10px] text-red">{error}</div>}
+          <input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="Rule name"
+            className="w-full border border-line-strong bg-ink-900 px-3 py-2 font-mono-ui text-[11px] text-paper outline-none"
+          />
+          <input
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            placeholder="Description (optional)"
+            className="w-full border border-line-strong bg-ink-900 px-3 py-2 font-mono-ui text-[11px] text-paper outline-none"
+          />
+          <div className="grid grid-cols-3 gap-2">
+            <select value={form.conditions.conditions[0].field} onChange={(e) => setForm({ ...form, conditions: { ...form.conditions, conditions: [{ ...form.conditions.conditions[0], field: e.target.value }] } })} className="border border-line-strong bg-ink-900 px-2 py-2 font-mono-ui text-[10px] text-paper">
+              <option value="severity">Severity</option>
+              <option value="attack_type">Attack Type</option>
+              <option value="src_ip">Source IP</option>
+              <option value="dest_port">Dest Port</option>
+            </select>
+            <select value={form.conditions.conditions[0].operator} onChange={(e) => setForm({ ...form, conditions: { ...form.conditions, conditions: [{ ...form.conditions.conditions[0], operator: e.target.value }] } })} className="border border-line-strong bg-ink-900 px-2 py-2 font-mono-ui text-[10px] text-paper">
+              <option value="equals">Equals</option>
+              <option value="contains">Contains</option>
+              <option value="not_equals">Not Equals</option>
+              <option value="greater_than">Greater Than</option>
+            </select>
+            <input
+              value={form.conditions.conditions[0].value}
+              onChange={(e) => setForm({ ...form, conditions: { ...form.conditions, conditions: [{ ...form.conditions.conditions[0], value: e.target.value }] } })}
+              placeholder="Value"
+              className="border border-line-strong bg-ink-900 px-2 py-2 font-mono-ui text-[10px] text-paper outline-none"
+            />
+          </div>
+          <button type="button" onClick={handleCreate} className="w-full bg-amber/20 border border-amber/40 py-2 font-mono-ui text-[10px] text-amber hover:bg-amber/30">
+            Create Rule
+          </button>
+        </div>
+      )}
+
+      <div className="divide-y divide-line">
+        {loading ? (
+          <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-ash-dark">Loading...</div>
+        ) : rules.length === 0 ? (
+          <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-ash-dark">No rules yet. Create one to customize alert handling.</div>
+        ) : (
+          rules.map((rule) => (
+            <div key={rule.id} className="flex items-center justify-between px-4 py-4">
+              <div>
+                <div className="font-mono-ui text-xs text-paper">{rule.name}</div>
+                <div className="mt-1 font-mono-ui text-[10px] text-ash-dark">{rule.description || 'No description'}</div>
+                <div className="mt-1 font-mono-ui text-[9px] text-amber">{rule.match_count} matches</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusDot tone={rule.is_enabled ? 'live' : 'offline'} />
+                <button type="button" onClick={() => handleDelete(rule.id)} className="font-mono-ui text-[10px] text-red hover:text-red/80">Delete</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PlaybooksPanel() {
+  const [playbooks, setPlaybooks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', description: '', alert_type: '', steps: [{ type: 'manual', title: '', description: '' }] });
+  const [error, setError] = useState('');
+
+  const fetchPlaybooks = () => {
+    const token = localStorage.getItem('flare_token');
+    fetch(`${API_BASE}/api/v1/playbooks`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => { setPlaybooks(d.playbooks || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchPlaybooks(); }, []);
+
+  const handleCreate = async () => {
+    setError('');
+    const token = localStorage.getItem('flare_token');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/playbooks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ...form, is_enabled: true }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Failed'); }
+      setShowForm(false);
+      setForm({ name: '', description: '', alert_type: '', steps: [{ type: 'manual', title: '', description: '' }] });
+      fetchPlaybooks();
+    } catch (err) { setError(err.message); }
+  };
+
+  const handleDelete = async (id) => {
+    const token = localStorage.getItem('flare_token');
+    await fetch(`${API_BASE}/api/v1/playbooks/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    fetchPlaybooks();
+  };
+
+  return (
+    <section className="dashboard-panel">
+      <div className="flex items-center justify-between border-b border-line-strong px-4 py-4">
+        <div>
+          <div className="eyebrow text-ash-dark">Incident response</div>
+          <h2 className="mt-1 text-base font-semibold text-paper">Playbooks</h2>
+        </div>
+        <button type="button" onClick={() => setShowForm(!showForm)} className="font-mono-ui text-[10px] text-amber hover:text-amber/80">
+          {showForm ? 'Cancel' : '+ New Playbook'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="border-b border-line p-4 space-y-3">
+          {error && <div className="font-mono-ui text-[10px] text-red">{error}</div>}
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Playbook name" className="w-full border border-line-strong bg-ink-900 px-3 py-2 font-mono-ui text-[11px] text-paper outline-none" />
+          <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description" className="w-full border border-line-strong bg-ink-900 px-3 py-2 font-mono-ui text-[11px] text-paper outline-none" />
+          <input value={form.alert_type} onChange={(e) => setForm({ ...form, alert_type: e.target.value })} placeholder="Alert type (e.g. ddos, malware)" className="w-full border border-line-strong bg-ink-900 px-3 py-2 font-mono-ui text-[11px] text-paper outline-none" />
+          <div className="space-y-2">
+            {form.steps.map((step, i) => (
+              <div key={i} className="flex gap-2">
+                <input value={step.title} onChange={(e) => { const s = [...form.steps]; s[i] = { ...s[i], title: e.target.value }; setForm({ ...form, steps: s }); }} placeholder={`Step ${i + 1} title`} className="flex-1 border border-line-strong bg-ink-900 px-2 py-1 font-mono-ui text-[10px] text-paper outline-none" />
+                <button type="button" onClick={() => setForm({ ...form, steps: form.steps.filter((_, j) => j !== i) })} className="text-red font-mono-ui text-[10px]">x</button>
+              </div>
+            ))}
+            <button type="button" onClick={() => setForm({ ...form, steps: [...form.steps, { type: 'manual', title: '', description: '' }] })} className="font-mono-ui text-[10px] text-amber">+ Add step</button>
+          </div>
+          <button type="button" onClick={handleCreate} className="w-full bg-amber/20 border border-amber/40 py-2 font-mono-ui text-[10px] text-amber hover:bg-amber/30">Create Playbook</button>
+        </div>
+      )}
+
+      <div className="divide-y divide-line">
+        {loading ? (
+          <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-ash-dark">Loading...</div>
+        ) : playbooks.length === 0 ? (
+          <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-ash-dark">No playbooks yet.</div>
+        ) : (
+          playbooks.map((pb) => (
+            <div key={pb.id} className="px-4 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-mono-ui text-xs text-paper">{pb.name}</div>
+                  <div className="mt-1 font-mono-ui text-[10px] text-ash-dark">{pb.description || 'No description'}</div>
+                  <div className="mt-1 font-mono-ui text-[9px] text-amber">{pb.execution_count} executions // {pb.steps?.length || 0} steps</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusDot tone={pb.is_enabled ? 'live' : 'offline'} />
+                  <button type="button" onClick={() => handleDelete(pb.id)} className="font-mono-ui text-[10px] text-red hover:text-red/80">Delete</button>
+                </div>
+              </div>
+              {pb.steps && pb.steps.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {pb.steps.map((step, i) => (
+                    <div key={i} className="flex items-center gap-2 font-mono-ui text-[9px] text-ash-dark">
+                      <span className="text-amber">{i + 1}.</span>
+                      <span className={`px-1 py-0.5 ${step.type === 'auto' ? 'bg-green/10 text-green' : 'bg-blue/10 text-blue'}`}>{step.type}</span>
+                      <span>{step.title || 'Untitled step'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function NotificationsPanel() {
+  const [prefs, setPrefs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [channel, setChannel] = useState('email');
+  const [eventType, setEventType] = useState('alert.high_severity');
+
+  const fetchPrefs = () => {
+    const token = localStorage.getItem('flare_token');
+    fetch(`${API_BASE}/api/v1/notifications/preferences`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => { setPrefs(d.preferences || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchPrefs(); }, []);
+
+  const handleToggle = async (pref) => {
+    const token = localStorage.getItem('flare_token');
+    await fetch(`${API_BASE}/api/v1/notifications/preferences`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ channel: pref.channel, event_type: pref.event_type, is_enabled: !pref.is_enabled }),
+    });
+    fetchPrefs();
+  };
+
+  const handleAdd = async () => {
+    const token = localStorage.getItem('flare_token');
+    await fetch(`${API_BASE}/api/v1/notifications/preferences`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ channel, event_type: eventType, is_enabled: true }),
+    });
+    fetchPrefs();
+  };
+
+  const handleDelete = async (id) => {
+    const token = localStorage.getItem('flare_token');
+    await fetch(`${API_BASE}/api/v1/notifications/preferences/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    fetchPrefs();
+  };
+
+  return (
+    <section className="dashboard-panel">
+      <div className="border-b border-line-strong px-4 py-4">
+        <div className="eyebrow text-ash-dark">Alert notifications</div>
+        <h2 className="mt-1 text-base font-semibold text-paper">Notification preferences</h2>
+      </div>
+
+      <div className="border-b border-line p-4">
+        <div className="flex gap-2">
+          <select value={channel} onChange={(e) => setChannel(e.target.value)} className="border border-line-strong bg-ink-900 px-2 py-2 font-mono-ui text-[10px] text-paper">
+            <option value="email">Email</option>
+            <option value="slack">Slack</option>
+          </select>
+          <select value={eventType} onChange={(e) => setEventType(e.target.value)} className="flex-1 border border-line-strong bg-ink-900 px-2 py-2 font-mono-ui text-[10px] text-paper">
+            <option value="alert.high_severity">High Severity Alert</option>
+            <option value="rule.matched">Rule Matched</option>
+            <option value="export.ready">Export Ready</option>
+          </select>
+          <button type="button" onClick={handleAdd} className="bg-amber/20 border border-amber/40 px-3 py-2 font-mono-ui text-[10px] text-amber hover:bg-amber/30">Add</button>
+        </div>
+      </div>
+
+      <div className="divide-y divide-line">
+        {loading ? (
+          <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-ash-dark">Loading...</div>
+        ) : prefs.length === 0 ? (
+          <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-ash-dark">No notification preferences configured.</div>
+        ) : (
+          prefs.map((pref) => (
+            <div key={pref.id} className="flex items-center justify-between px-4 py-4">
+              <div className="flex items-center gap-3">
+                <StatusDot tone={pref.is_enabled ? 'live' : 'offline'} />
+                <div>
+                  <div className="font-mono-ui text-xs text-paper">{pref.channel.toUpperCase()}</div>
+                  <div className="mt-1 font-mono-ui text-[10px] text-ash-dark">{pref.event_type}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => handleToggle(pref)} className="font-mono-ui text-[10px] text-amber hover:text-amber/80">
+                  {pref.is_enabled ? 'Disable' : 'Enable'}
+                </button>
+                <button type="button" onClick={() => handleDelete(pref.id)} className="font-mono-ui text-[10px] text-red hover:text-red/80">Delete</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function WorkspacePanel({ section, alerts, filteredAlerts, selected, onSelect, filters, onFilterChange, density, onDensityChange, onAddAlert }) {
   if (section === 'overview' || section === 'feed') {
     return (
@@ -306,5 +739,9 @@ export default function WorkspacePanel({ section, alerts, filteredAlerts, select
   if (section === 'timeline') return <TimelinePanel />;
   if (section === 'correlated') return <CorrelatedPanel alerts={alerts} onFilterChange={onFilterChange} />;
   if (section === 'eval') return <EvalPanel />;
+  if (section === 'rules') return <RulesPanel />;
+  if (section === 'playbooks') return <PlaybooksPanel />;
+  if (section === 'notifications') return <NotificationsPanel />;
+  if (section === 'export') return <ExportPanel filters={filters} />;
   return null;
 }

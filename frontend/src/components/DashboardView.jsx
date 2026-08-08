@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import CommandBar from './CommandBar.jsx';
 import SideRail from './SideRail.jsx';
 import DashboardHeader from './DashboardHeader.jsx';
@@ -9,7 +9,7 @@ import AlertDetailDrawer from './AlertDetailDrawer.jsx';
 import CommandPalette from './CommandPalette.jsx';
 import { NAV_ITEMS } from './CommandBar.jsx';
 
-export default function DashboardView({ alerts, filteredAlerts, selected, onSelect, onClose, filters, onFilterChange, activeSection, onNavigate, paused, onTogglePaused, density, onDensityChange, onAddAlert, onCommand }) {
+export default function DashboardView({ alerts, filteredAlerts, selected, onSelect, onClose, filters, onFilterChange, activeSection, onNavigate, paused, onTogglePaused, density, onDensityChange, onAddAlert, onCommand, onLogout, connectionStatus }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
 
@@ -42,6 +42,10 @@ export default function DashboardView({ alerts, filteredAlerts, selected, onSele
     onCommand?.(command);
   };
 
+  const handleTopologyFocus = useCallback((node) => {
+    onFilterChange({ search: node.src_ip || node.label });
+  }, [onFilterChange]);
+
   return (
     <div id="dashboard" className={`page-enter min-h-screen bg-ink-950 text-paper ${density === 'compact' ? 'density-compact' : ''}`}>
       <CommandBar
@@ -53,6 +57,8 @@ export default function DashboardView({ alerts, filteredAlerts, selected, onSele
         onDensityChange={onDensityChange}
         onMobileNav={() => setMobileNavOpen(true)}
         onOpenCommands={() => setCommandOpen(true)}
+        onLogout={onLogout}
+        connectionStatus={connectionStatus}
       />
       <SideRail
         activeSection={activeSection}
@@ -92,7 +98,7 @@ export default function DashboardView({ alerts, filteredAlerts, selected, onSele
               alerts={alerts}
               selected={selected}
               paused={paused}
-              onTopologyFocus={(node) => onFilterChange({ search: node.src_ip || node.label })}
+              onTopologyFocus={handleTopologyFocus}
             />
           </div>
         </div>

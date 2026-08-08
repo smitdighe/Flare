@@ -28,7 +28,7 @@ export default function OperationsRail({ alerts, selected, paused, onTopologyFoc
           </div>
           <span className="font-mono-ui text-[10px] text-red">{highCount} hot</span>
         </div>
-        <SignalTopology activeAlert={selected} onFocus={onTopologyFocus} />
+        <SignalTopology alerts={alerts} activeAlert={selected} onFocus={onTopologyFocus} />
         <div className="flex items-center justify-between border-t border-line px-4 py-3 font-mono-ui text-[9px] uppercase tracking-[0.08em] text-ash-dark">
           <span>nodes 06 // edges 07</span>
           <span className={paused ? 'text-yellow' : 'text-green'}>{paused ? 'spooled' : 'syncing'}</span>

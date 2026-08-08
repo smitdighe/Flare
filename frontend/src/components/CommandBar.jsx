@@ -1,5 +1,6 @@
 import Icon from './Icon.jsx';
 import StatusDot from './StatusDot.jsx';
+import { useTheme } from '../contexts/ThemeContext.jsx';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
@@ -10,11 +11,16 @@ const NAV_ITEMS = [
   { id: 'timeline', label: 'System logs', icon: 'terminal' },
   { id: 'correlated', label: 'Threat clusters', icon: 'hub' },
   { id: 'eval', label: 'Evaluation', icon: 'query_stats' },
+  { id: 'rules', label: 'Rules', icon: 'tune' },
+  { id: 'playbooks', label: 'Playbooks', icon: 'fact_check' },
+  { id: 'notifications', label: 'Notifications', icon: 'notifications' },
+  { id: 'export', label: 'Export', icon: 'download' },
 ];
 
 export { NAV_ITEMS };
 
-export default function CommandBar({ search, onSearch, paused, onTogglePaused, density, onDensityChange, onMobileNav, onOpenCommands }) {
+export default function CommandBar({ search, onSearch, paused, onTogglePaused, density, onDensityChange, onMobileNav, onOpenCommands, onLogout, connectionStatus }) {
+  const { theme, toggleTheme } = useTheme();
   return (
     <header className="fixed inset-x-0 top-0 z-40 flex h-[var(--topbar-height)] items-center border-b border-line-strong bg-ink-950/96 px-4 backdrop-blur-sm lg:px-6">
       <div className="flex min-w-0 items-center gap-3 lg:w-[var(--rail-width)]">
@@ -59,13 +65,22 @@ export default function CommandBar({ search, onSearch, paused, onTogglePaused, d
         </button>
         <button
           type="button"
-          className="ghost-button hidden h-8 items-center gap-2 px-2.5 font-mono-ui text-[9px] uppercase tracking-[0.1em] md:flex"
+          className="ghost-button hidden h-8 items-center gap-2 border border-line-strong px-2.5 font-mono-ui text-[9px] uppercase tracking-[0.1em] md:flex"
           data-active={density === 'compact'}
           onClick={() => onDensityChange(density === 'compact' ? 'comfortable' : 'compact')}
           aria-pressed={density === 'compact'}
         >
           <Icon name="density_small" size={15} />
           <span className="hidden xl:inline">{density === 'compact' ? 'compact' : 'comfortable'}</span>
+        </button>
+        <button
+          type="button"
+          className="ghost-button hidden h-8 items-center gap-1 px-2 font-mono-ui text-[9px] uppercase tracking-[0.1em] md:flex"
+          onClick={toggleTheme}
+          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+        >
+          <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={15} />
+          <span className="hidden xl:inline">{theme === 'dark' ? 'light' : 'dark'}</span>
         </button>
         <button
           type="button"
@@ -77,6 +92,37 @@ export default function CommandBar({ search, onSearch, paused, onTogglePaused, d
           <span className="hidden sm:inline">{paused ? 'paused' : 'live'}</span>
           <Icon name={paused ? 'play_arrow' : 'pause'} size={14} />
         </button>
+        <div className={`hidden items-center gap-1.5 border px-2 py-1.5 font-mono-ui text-[8px] uppercase tracking-[0.1em] sm:flex ${
+          connectionStatus === 'connected' ? 'border-green/30 text-green' :
+          connectionStatus === 'connecting' ? 'border-yellow/30 text-yellow' :
+          'border-red/30 text-red'
+        }`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${
+            connectionStatus === 'connected' ? 'bg-green' :
+            connectionStatus === 'connecting' ? 'bg-yellow animate-pulse' :
+            'bg-red'
+          }`} />
+          <span>{connectionStatus === 'connected' ? 'WS' : connectionStatus === 'connecting' ? 'WS...' : 'SSE'}</span>
+        </div>
+        {onLogout && (
+          <>
+            <a
+              href="/settings"
+              className="ghost-button hidden h-8 items-center gap-1 border border-line-strong px-2.5 font-mono-ui text-[9px] uppercase tracking-[0.1em] md:flex"
+            >
+              <Icon name="settings" size={14} />
+              <span className="hidden xl:inline">settings</span>
+            </a>
+            <button
+              type="button"
+              className="ghost-button hidden h-8 items-center gap-2 border border-line-strong px-2.5 font-mono-ui text-[9px] uppercase tracking-[0.1em] md:flex"
+              onClick={onLogout}
+            >
+              <Icon name="logout" size={14} />
+              <span className="hidden xl:inline">logout</span>
+            </button>
+          </>
+        )}
       </div>
     </header>
   );
