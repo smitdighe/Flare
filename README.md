@@ -10,25 +10,25 @@ Multi-agent security alert triage engine. Classifies, enriches, and reasons over
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                   Frontend (React)                    │
+│                   Frontend (React)                   │
 │  Vite + Tailwind + Three.js + Motion                 │
 │  WebSocket live feed · Command palette · 3D topology │
 │  Dark/Light theme · Settings · Auth with refresh     │
 └──────────────────────┬───────────────────────────────┘
                        │ WebSocket + REST
 ┌──────────────────────▼───────────────────────────────┐
-│                  Backend (FastAPI)                     │
-│                                                       │
-│   ┌──────────┐   ┌──────────┐   ┌──────────┐        │
-│   │ CLASSIFY │──▶│  ENRICH  │──▶│  REASON  │──▶ END │
-│   │  Groq    │   │ AbuseIPDB│   │ Gemini   │        │
-│   │ Llama 3.1│   │ VirusTotal│  │ + RAG    │        │
-│   └──────────┘   └──────────┘   └──────────┘        │
-│        │              │               │               │
-│        ▼              ▼               ▼               │
+│                  Backend (FastAPI)                   │
+│                                                      │
+│   ┌──────────┐   ┌──────────┐   ┌──────────┐         │
+│   │ CLASSIFY │──▶│  ENRICH  │──▶│  REASON  │──▶ END│
+│   │  Groq    │   │ AbuseIPDB│   │ Gemini   │         │
+│   │ Llama 3.1│   │ VirusTotal│  │ + RAG    │         │
+│   └──────────┘   └──────────┘   └──────────┘         │
+│        │              │               │              │
+│        ▼              ▼               ▼              │
 │   Severity +      IOC rep +     MITRE technique +    │
 │   attack type     VT verdict    remediation steps    │
-│                                                       │
+│                                                      │
 │   ┌─────────────────────────────────────────────┐    │
 │   │  SQLite + SQLAlchemy + Alembic migrations   │    │
 │   │  APScheduler background jobs                │    │

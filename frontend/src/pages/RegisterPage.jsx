@@ -1,115 +1,22 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import AuthShell, { AuthBackLink, AuthError, AuthSubmit, FormField } from '../components/AuthShell.jsx';
 
 export default function RegisterPage() {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { register } = useAuth();
-  const navigate = useNavigate();
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return;
-    }
-    setLoading(true);
-    try {
-      await register(email, name, password);
-      navigate('/dashboard');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0a0a1a 0%, #0f1a3a 50%, #0a0a1a 100%)' }}>
-      <div style={{ width: 400, padding: 40, background: 'rgba(15, 20, 40, 0.9)', borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)' }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <h1 style={{ color: '#e94560', fontSize: 28, margin: 0 }}>Flare</h1>
-          <p style={{ color: '#888', marginTop: 8 }}>Create your account</p>
-        </div>
-
-        {error && (
-          <div style={{ padding: '10px 14px', background: 'rgba(233,69,96,0.15)', border: '1px solid rgba(233,69,96,0.3)', borderRadius: 8, color: '#e94560', marginBottom: 16, fontSize: 14 }}>
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', color: '#aaa', fontSize: 13, marginBottom: 6 }}>Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
-              placeholder="Your name"
-            />
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', color: '#aaa', fontSize: 13, marginBottom: 6 }}>Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
-              placeholder="you@example.com"
-            />
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', color: '#aaa', fontSize: 13, marginBottom: 6 }}>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
-              placeholder="Min 8 characters"
-            />
-          </div>
-          <div style={{ marginBottom: 24 }}>
-            <label style={{ display: 'block', color: '#aaa', fontSize: 13, marginBottom: 6 }}>Confirm Password</label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
-              placeholder="Repeat password"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            style={{ width: '100%', padding: '12px 0', background: loading ? '#555' : '#e94560', border: 'none', borderRadius: 8, color: '#fff', fontSize: 15, fontWeight: 600, cursor: loading ? 'default' : 'pointer' }}
-          >
-            {loading ? 'Creating account...' : 'Create Account'}
-          </button>
-        </form>
-
-        <div style={{ textAlign: 'center', marginTop: 20, color: '#666', fontSize: 13 }}>
-          Already have an account? <Link to="/login" style={{ color: '#e94560', textDecoration: 'none' }}>Sign in</Link>
-        </div>
-
-        <div style={{ textAlign: 'center', marginTop: 12 }}>
-          <Link to="/" style={{ color: '#555', fontSize: 12, textDecoration: 'none' }}>Back to home</Link>
-        </div>
-      </div>
-    </div>
-  );
+  const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState(''); const [loading, setLoading] = useState(false); const { register } = useAuth(); const navigate = useNavigate();
+  const handleSubmit = async (event) => { event.preventDefault(); setError(''); if (password !== confirmPassword) return setError('Passwords do not match'); if (password.length < 8) return setError('Password must be at least 8 characters'); setLoading(true); try { await register(email, name, password); navigate('/dashboard'); } catch (err) { setError(err.message || 'Unable to create account'); } finally { setLoading(false); } };
+  return <AuthShell eyebrow="IDENTITY GATE // 02" title={<>Build a calmer<br /><span className="text-amber">security practice.</span></>} description="Create an operator account for the Flare command center. Your first workspace is ready when you are." footer={<><span>Already registered?</span> <Link to="/login">Sign in <span aria-hidden="true">↗</span></Link><AuthBackLink /></>}>
+    <div className="auth-heading"><h2>Create operator account</h2><p>Provision access to the live triage workspace.</p></div>
+    {error && <AuthError>{error}</AuthError>}
+    <form onSubmit={handleSubmit} className="auth-form">
+      <FormField label="Operator name" id="register-name" type="text" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="Alex Morgan" required />
+      <FormField label="Work email" id="register-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" placeholder="operator@company.com" required />
+      <FormField label="Password" id="register-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder="Minimum 8 characters" minLength={8} required />
+      <FormField label="Confirm password" id="register-confirm" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" placeholder="Repeat password" required />
+      <p className="auth-note"><span className="status-pip" /> Passwords are hashed and never exposed to the workspace.</p>
+      <AuthSubmit loading={loading}>Create operator account</AuthSubmit>
+    </form>
+  </AuthShell>;
 }
