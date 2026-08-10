@@ -1,25 +1,61 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Landing page', () => {
-  test('loads and shows launch button', async ({ page }) => {
+  test('loads and shows hero content', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+
     await page.goto('/');
-    await expect(page.getByRole('button', { name: /open flare/i })).toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(2000);
+
+    expect(errors).toHaveLength(0);
+
+    const heroText = page.locator('text=Triage at the speed');
+    await expect(heroText).toBeVisible({ timeout: 10000 });
+  });
+});
+
+test.describe('Login page', () => {
+  test('loads with animated background and form', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+
+    await page.goto('/login');
+    await page.waitForTimeout(2000);
+
+    expect(errors).toHaveLength(0);
+
+    await expect(page.locator('text=Operator sign in')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=secure access')).toBeVisible();
+  });
+});
+
+test.describe('Register page', () => {
+  test('loads with form and password strength', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+
+    await page.goto('/register');
+    await page.waitForTimeout(2000);
+
+    expect(errors).toHaveLength(0);
+
+    await expect(page.locator('text=Request clearance')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=operator name')).toBeVisible();
   });
 });
 
 test.describe('Auth flow', () => {
   test('register, login, and reach dashboard', async ({ page }) => {
-    // Register
     await page.goto('/register');
     await page.waitForTimeout(1000);
     const email = `test${Date.now()}@e2e.com`;
-    await page.fill('input[type="email"], input[name="email"], input[placeholder*="email" i]', email);
-    await page.fill('input[name="name"], input[placeholder*="name" i]', 'E2E User');
-    await page.fill('input[type="password"]', 'password123');
+    await page.fill('input[type="email"]', email);
+    await page.fill('input[placeholder*="Alex"]', 'E2E User');
+    await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
     await page.waitForTimeout(3000);
 
-    // Should reach dashboard or stay on register (if backend not running)
     const url = page.url();
     const onDashboard = url.includes('/dashboard');
     const onRegister = url.includes('/register');

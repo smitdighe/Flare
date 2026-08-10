@@ -221,13 +221,20 @@ flare/
 │   │   │   ├── DashboardPage.jsx
 │   │   │   └── SettingsPage.jsx # Profile/Security/Appearance
 │   │   ├── hooks/
-│   │   │   ├── useAlertStream.js # WebSocket + SSE fallback
-│   │   │   ├── useMotionPointer.js
-│   │   │   └── useScrollProgress.js
-│   │   ├── components/ (25 components)
+│   │   │   └── useAlertStream.js # WebSocket + SSE fallback
+│   │   ├── components/
+│   │   │   ├── dash/            # Dashboard components (lucide icons)
+│   │   │   ├── flare/          # Shared flare components
+│   │   │   ├── landing/        # Landing page components
+│   │   │   └── *.jsx           # Core UI components
+│   │   ├── lib/
+│   │   │   ├── utils.js        # cn() utility
+│   │   │   └── flare-data.js   # Shared constants
 │   │   └── styles/
+│   │       ├── tokens.css      # Design system tokens
+│   │       └── app.css         # Dashboard component styles
 │   ├── e2e/
-│   │   └── auth.spec.js         # Playwright E2E tests
+│   │   └── auth.spec.js        # Playwright E2E tests
 │   ├── playwright.config.js
 │   ├── package.json
 │   └── vite.config.js

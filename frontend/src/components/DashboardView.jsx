@@ -1,23 +1,17 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useMemo, useState, useCallback } from 'react';
-import CommandBar from './CommandBar.jsx';
-import SideRail from './SideRail.jsx';
-import DashboardHeader from './DashboardHeader.jsx';
-import WorkspacePanel from './WorkspacePanel.jsx';
-import OperationsRail from './OperationsRail.jsx';
+import { useEffect, useState, useCallback } from 'react';
+import { DashSidebar } from './dash/DashSidebar.jsx';
+import { TopBar } from './dash/TopBar.jsx';
+import { RightRail } from './dash/RightRail.jsx';
+import { CommandPalette } from './dash/CommandPalette.jsx';
 import AlertDetailDrawer from './AlertDetailDrawer.jsx';
-import CommandPalette from './CommandPalette.jsx';
-import { NAV_ITEMS } from './CommandBar.jsx';
+import WorkspacePanel from './WorkspacePanel.jsx';
 
-export default function DashboardView({ alerts, filteredAlerts, selected, onSelect, onClose, filters, onFilterChange, activeSection, onNavigate, paused, onTogglePaused, density, onDensityChange, onAddAlert, onCommand, onLogout, connectionStatus }) {
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+export default function DashboardView({ alerts, filteredAlerts, selected, onSelect, onClose, filters, onFilterChange, activeSection, onNavigate, paused, onTogglePaused, density, onDensityChange, onAddAlert, onLogout, connectionStatus }) {
   const [commandOpen, setCommandOpen] = useState(false);
 
   useEffect(() => {
     const onKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setMobileNavOpen(false);
-      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setCommandOpen(true);
@@ -27,49 +21,57 @@ export default function DashboardView({ alerts, filteredAlerts, selected, onSele
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const commands = useMemo(() => [
-    ...NAV_ITEMS.map((item) => ({ id: item.id, label: `Open ${item.label}`, detail: 'Navigate workspace', icon: item.icon })),
-    { id: paused ? 'resume' : 'pause', label: paused ? 'Resume live stream' : 'Pause live stream', detail: 'Control incoming SSE events', icon: paused ? 'play_arrow' : 'pause' },
-    { id: 'simulate', label: 'Simulate signal', detail: 'Add a synthetic alert to the buffer', icon: 'add' },
-    { id: 'close', label: 'Close selected alert', detail: 'Dismiss the evidence drawer', icon: 'close' },
-  ], [paused]);
-
-  const executeCommand = (command) => {
-    if (NAV_ITEMS.some((item) => item.id === command)) onNavigate(command);
-    else if (command === 'pause' || command === 'resume') onTogglePaused();
-    else if (command === 'simulate') onAddAlert();
-    else if (command === 'close') onClose();
-    onCommand?.(command);
-  };
-
-  const handleTopologyFocus = useCallback((node) => {
-    onFilterChange({ search: node.src_ip || node.label });
-  }, [onFilterChange]);
+  const handleNavigate = useCallback((section) => {
+    onNavigate(section);
+    setCommandOpen(false);
+  }, [onNavigate]);
 
   return (
-    <div id="dashboard" className={`page-enter min-h-screen bg-ink-950 text-paper ${density === 'compact' ? 'density-compact' : ''}`}>
-      <CommandBar
-        search={filters.search || ''}
-        onSearch={(search) => onFilterChange({ search: search || undefined })}
+    <div id="dashboard" className={`page-enter min-h-screen bg-background text-foreground ${density === 'compact' ? 'density-compact' : ''}`}>
+      <TopBar
+        alerts={alerts}
         paused={paused}
         onTogglePaused={onTogglePaused}
-        density={density}
-        onDensityChange={onDensityChange}
-        onMobileNav={() => setMobileNavOpen(true)}
-        onOpenCommands={() => setCommandOpen(true)}
+        onCommand={() => setCommandOpen(true)}
         onLogout={onLogout}
         connectionStatus={connectionStatus}
       />
-      <SideRail
+      <DashSidebar
         activeSection={activeSection}
-        onNavigate={onNavigate}
-        mobileNavOpen={mobileNavOpen}
-        onClose={() => setMobileNavOpen(false)}
+        onNavigate={handleNavigate}
       />
-      <main className="min-h-screen pt-[var(--topbar-height)] lg:pl-[var(--rail-width)]">
-        <div className="mx-auto max-w-[var(--content-max)] px-4 py-6 lg:px-7 lg:py-8">
-          <DashboardHeader alerts={alerts} activeSection={activeSection} paused={paused} />
-          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <main className="min-h-[calc(100vh-3.5rem)] pt-14 lg:pl-56">
+        <div className="mx-auto max-w-[1400px] px-4 py-6 lg:px-7 lg:py-8">
+          <div className="mt-2 mb-5 flex items-end justify-between">
+            <div>
+              <div className="mono-label flex items-center gap-2">
+                <span className={`h-1.5 w-1.5 rounded-full ${paused ? 'bg-yellow-500' : 'bg-signal animate-blink'}`} />
+                {paused ? 'STREAM PAUSED' : 'STREAM ACTIVE'} <span className="text-muted-foreground">// {activeSection}</span>
+              </div>
+              <h1 className="font-display mt-2 text-4xl leading-[0.95] md:text-5xl">
+                Incident command <span className="text-muted-foreground">/ live queue</span>
+              </h1>
+              <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+                Prioritize the highest-signal events, inspect the evidence trail, and move the incident forward.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 border border-border bg-card">
+              <div className="border-r border-border px-4 py-3">
+                <div className="mono-label text-[9px]">TOTAL</div>
+                <div className="mt-1 font-mono text-xl text-foreground">{alerts.length}</div>
+              </div>
+              <div className="border-r border-border px-4 py-3">
+                <div className="mono-label text-[9px]">HIGH</div>
+                <div className="mt-1 font-mono text-xl text-primary">{alerts.filter((a) => a.severity === 'high' || a.severity === 'critical').length}</div>
+              </div>
+              <div className="px-4 py-3">
+                <div className="mono-label text-[9px]">MEDIUM</div>
+                <div className="mt-1 font-mono text-xl text-yellow-500">{alerts.filter((a) => a.severity === 'medium').length}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0">
               <AnimatePresence mode="wait">
                 <motion.div
@@ -94,15 +96,11 @@ export default function DashboardView({ alerts, filteredAlerts, selected, onSele
                 </motion.div>
               </AnimatePresence>
             </div>
-            <OperationsRail
-              alerts={alerts}
-              selected={selected}
-              paused={paused}
-              onTopologyFocus={handleTopologyFocus}
-            />
+            <RightRail alerts={alerts} />
           </div>
         </div>
       </main>
+
       <AnimatePresence>
         {selected && (
           <motion.div key="drawer-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -111,7 +109,13 @@ export default function DashboardView({ alerts, filteredAlerts, selected, onSele
         )}
       </AnimatePresence>
       {selected && <AlertDetailDrawer alert={selected} onClose={onClose} />}
-      <CommandPalette open={commandOpen} commands={commands} onExecute={executeCommand} onClose={() => setCommandOpen(false)} />
+
+      <CommandPalette
+        open={commandOpen}
+        onOpenChange={setCommandOpen}
+        onNavigate={handleNavigate}
+        alerts={alerts}
+      />
     </div>
   );
 }
