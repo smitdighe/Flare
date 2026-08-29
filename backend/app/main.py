@@ -214,10 +214,14 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     app.add_middleware(RequestIdMiddleware)
+    cors_origins = _build_cors_origins(settings)
+    # Starlette reflects the caller's Origin when "*" is combined with
+    # allow_credentials, which lets any site read authenticated responses.
+    # Credentials are only offered when the origin list is explicit.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=_build_cors_origins(settings),
-        allow_credentials=True,
+        allow_origins=cors_origins,
+        allow_credentials="*" not in cors_origins,
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["X-Request-ID"],

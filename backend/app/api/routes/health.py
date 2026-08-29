@@ -17,13 +17,13 @@ import time
 from typing import Any
 
 from fastapi import APIRouter
-from sqlalchemy import text
 
 from app.config import get_settings
 from app.core.logging import get_logger
 from app.deps import SessionDep, WorkerManagerDep
 from app.providers.base import HealthStatus, ProviderHealth
 from app.schemas import FlareModel
+from app.store.repositories import ping as db_ping
 
 log = get_logger(__name__)
 
@@ -138,7 +138,7 @@ async def _check_chroma() -> ServiceHealth:
 
 async def _check_database(session: Any) -> ServiceHealth:
     t0 = time.perf_counter()
-    await session.execute(text("SELECT 1"))
+    await db_ping(session)
     return ServiceHealth(status="ok", latency_ms=int((time.perf_counter() - t0) * 1000))
 
 

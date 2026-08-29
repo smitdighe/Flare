@@ -85,7 +85,10 @@ def _scrub_text(text: str, secrets: frozenset[str]) -> str:
 def _redact(value: Any, secrets: frozenset[str], depth: int = 0) -> Any:
     """Recursively redact by key name, and scrub known secret values."""
     if depth >= _MAX_DEPTH:
-        return value
+        # Returning the raw value here would emit anything nested deeper than the
+        # cap unredacted — a deep alert payload is exactly where a leaked key
+        # would sit. Structure below the cap is not worth that.
+        return _REDACTED
     if isinstance(value, dict):
         return {
             key: (

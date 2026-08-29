@@ -84,7 +84,7 @@ class Alert(Base):
     attack_type: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     ground_truth_label: Mapped[str | None] = mapped_column(String(32), nullable=True)
     raw: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    total_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     updated_at: Mapped[datetime] = mapped_column(
         UtcDateTime, default=_utcnow, onupdate=_utcnow
     )
@@ -123,7 +123,7 @@ class Enrichment(Base):
     )
     enriched_at: Mapped[datetime] = mapped_column(UtcDateTime, default=_utcnow)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
-    max_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     payload: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
 
     alert: Mapped[Alert] = relationship(back_populates="enrichment")
@@ -201,6 +201,10 @@ class RunRowMixin:
 class EvalRun(RunRowMixin, Base):
     __tablename__ = "eval_runs"
 
+    # Every run launch reaps stale rows and looks for an active one, both on
+    # (status, started_at), and /runs orders by started_at.
+    __table_args__ = (Index("ix_eval_runs_status_started", "status", "started_at"),)
+
     overall: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     per_class: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     confusion_matrix: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
@@ -212,6 +216,9 @@ class EvalRun(RunRowMixin, Base):
 
 class BenchmarkRun(RunRowMixin, Base):
     __tablename__ = "benchmark_runs"
+
+    # Same access pattern as EvalRun — see the note there.
+    __table_args__ = (Index("ix_benchmark_runs_status_started", "status", "started_at"),)
 
     results: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     agreement_rate: Mapped[float | None] = mapped_column(Float, nullable=True)

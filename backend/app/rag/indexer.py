@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import threading
 import time
 from datetime import UTC, datetime
 from functools import partial
@@ -22,6 +23,10 @@ from app.rag.mitre_loader import load_corpus
 log = get_logger(__name__)
 
 _model: Any = None
+#: The lazy load takes tens of seconds. Without the lock a request racing the
+#: startup warmup builds a SECOND SentenceTransformer — double the load, double
+#: the resident memory.
+_model_lock = threading.Lock()
 _PROGRESS_EVERY = 25
 
 
@@ -29,9 +34,11 @@ def get_embedding_model() -> Any:
     """Cached sentence-transformers model (settings.EMBEDDING_MODEL)."""
     global _model
     if _model is None:
-        from sentence_transformers import SentenceTransformer
+        with _model_lock:
+            if _model is None:
+                from sentence_transformers import SentenceTransformer
 
-        _model = SentenceTransformer(get_settings().embedding_model)
+                _model = SentenceTransformer(get_settings().embedding_model)
     return _model
 
 

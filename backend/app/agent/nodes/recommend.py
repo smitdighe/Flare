@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.agent.sanitize import scrub_block, scrub_field
 from app.agent.state import TriageState, provider_for
 from app.agent.trace import NodeTrace, traced
 from app.core.logging import get_logger
@@ -40,6 +41,11 @@ log = get_logger(__name__)
 _MAX_TOKENS = 2048
 _TEMPERATURE = 0.2
 
+#: Upper bound on the reasoning narrative replayed into this prompt. Generous
+#: for a real analysis, tight enough that a padded injection cannot bury the
+#: citation constraint that follows it.
+_REASONING_MAX = 4000
+
 _PROMPT = (Path(__file__).parent.parent / "prompts" / "recommend.md").read_text(encoding="utf-8")
 
 
@@ -52,12 +58,15 @@ def _context_block(state: TriageState) -> str:
         if techniques
         else "(none — return an empty techniques list)"
     )
+    # The alert scalars are sensor-supplied and the narrative is model-generated
+    # from them, so both are untrusted input here — see app.agent.sanitize.
     return (
         "Alert:\n"
-        f"- signature: {alert.signature}\n"
-        f"- src_ip: {alert.src_ip}:{alert.src_port} -> dst_ip: {alert.dst_ip}:{alert.dst_port}\n"
-        f"- protocol: {alert.protocol}\n\n"
-        f"Analysis narrative:\n{reasoning}\n\n"
+        f"- signature: {scrub_field(alert.signature)}\n"
+        f"- src_ip: {scrub_field(alert.src_ip)}:{alert.src_port}"
+        f" -> dst_ip: {scrub_field(alert.dst_ip)}:{alert.dst_port}\n"
+        f"- protocol: {scrub_field(alert.protocol)}\n\n"
+        f"Analysis narrative:\n{scrub_block(reasoning, _REASONING_MAX)}\n\n"
         f"Available ATT&CK techniques (cite only these IDs):\n{tech_lines}"
     )
 

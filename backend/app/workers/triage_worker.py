@@ -30,10 +30,9 @@ log = get_logger(__name__)
 
 async def _publish_summary(ctx: WorkerContext, alert_id: str, new: bool) -> None:
     async with ctx.session_factory() as session:
-        detail = await ctx.repo.get(session, alert_id)
-    if detail is None:  # pragma: no cover - row must exist here
+        summary = await ctx.repo.get_summary(session, alert_id)
+    if summary is None:  # pragma: no cover - row must exist here
         return
-    summary = detail.to_summary()
     event = AlertNewEvent(data=summary) if new else AlertUpdatedEvent(data=summary)
     ctx.bus.publish(event)
 

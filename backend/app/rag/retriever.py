@@ -20,6 +20,12 @@ log = get_logger(__name__)
 
 EXCERPT_MAX = 500
 
+#: Chroma's ``count`` is a sqlite round trip on a worker thread, and it ran on
+#: every alert purely to detect an empty index. The index only ever grows, so
+#: once it is known non-empty the check never has to run again. Module scope on
+#: purpose: a fresh MitreRetriever is built per alert.
+_index_known_non_empty = False
+
 
 def _truncate(text: str, limit: int = EXCERPT_MAX) -> str:
     if len(text) <= limit:
@@ -53,12 +59,20 @@ class MitreRetriever:
         the duration. Each one goes through ``asyncio.to_thread``, as the
         embedding encode already did.
         """
+        global _index_known_non_empty
         col = await self._get_collection()
-        if await asyncio.to_thread(col.count) == 0:
-            log.warning("rag.empty_index")
-            return []
+        if not _index_known_non_empty:
+            if await asyncio.to_thread(col.count) == 0:
+                log.warning("rag.empty_index")
+                return []
+            _index_known_non_empty = True
 
-        q_emb = (await asyncio.to_thread(get_embedding_model().encode, [query]))[0].tolist()
+        # get_embedding_model() must be INSIDE the thread: as an argument it is
+        # evaluated on the event loop first, so a cold sentence-transformers load
+        # would block every other alert, SSE subscriber and the heartbeat.
+        q_emb = (
+            await asyncio.to_thread(lambda: get_embedding_model().encode([query]))
+        )[0].tolist()
 
         ids_filter = techniques_for(attack_type)
         where = {"technique_id": {"$in": ids_filter}} if ids_filter else None
