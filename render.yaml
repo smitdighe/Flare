@@ -1,0 +1,66 @@
+services:
+  - type: web
+    name: flare-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    region: oregon
+    buildCommand: >
+      pip install -e . &&
+      python -m scripts.build_label_set --verify-only &&
+      python scripts/fetch_datasets.py &&
+      python -m scripts.index_mitre &&
+      alembic upgrade head &&
+      python -m scripts.seed_demo
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      # JSON array — MUST be a real list or Settings() raises SettingsError and
+      # the app never boots. Origins are matched EXACTLY: a Vercel preview
+      # deploy (flare-secure-<hash>-<scope>.vercel.app) is a different origin
+      # from the production domain and needs its own entry here.
+      - key: CORS_ORIGINS
+        value: '["https://flare-secure.vercel.app"]'
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./data/flare.db
+      - key: CHROMA_PERSIST_DIR
+        value: ./data/chroma
+      - key: CHROMA_COLLECTION
+        value: mitre_attack
+      # The free instance has 512MB. sentence-transformers/torch alone is ~400MB
+      # resident on top of the app's ~130MB, so that backend is OOM-killed during
+      # startup and the deploy never passes its health check. The ONNX build is
+      # the same all-MiniLM-L6-v2 in ~140MB. Do not switch this on a free plan.
+      - key: EMBEDDING_BACKEND
+        value: onnx
+      # Inside the project dir, so the weights the build step unpacks are still
+      # there at runtime.
+      - key: EMBEDDING_CACHE_DIR
+        value: ./data/onnx
+      - key: DATASET_PATH
+        value: ./data/datasets
+      - key: GROUND_TRUTH_PATH
+        value: ./data/labels
+      # OFFLINE_MODE=true is the reliable fallback if free-tier LLM/intel quota
+      # runs out mid-demo — flip this env var and redeploy, no code change.
+      - key: OFFLINE_MODE
+        value: "false"
+      - key: WARM_EMBEDDING_MODEL_ON_STARTUP
+        value: "true"
+      # Secrets — set these in the Render dashboard, NOT here. sync: false means
+      # "this key exists, Render will prompt for the value" rather than
+      # committing it to the blueprint.
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: ABUSEIPDB_API_KEY
+        sync: false
+      - key: VIRUSTOTAL_API_KEY
+        sync: false

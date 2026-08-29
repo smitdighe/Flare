@@ -66,13 +66,15 @@ def _startup_checks(settings) -> None:  # noqa: ANN001
 def _start_embedding_warmup(settings) -> asyncio.Task[None] | None:  # noqa: ANN001
     """Load the embedding model in the background. Boot does not wait for it.
 
-    Cold-loading sentence-transformers takes ~34s on demo hardware. Left to the
-    first alert it happens INSIDE the retrieve node and eats the whole triage
-    budget — the first alert of the demo times out. Done here it overlaps with
-    everything else and the first alert finds it ready.
+    Cold-loading the model takes ~34s on demo hardware (torch backend; the ONNX
+    default is faster but still seconds). Left to the first alert it happens
+    INSIDE the retrieve node and eats the whole triage budget — the first alert
+    of the demo times out. Done here it overlaps with everything else and the
+    first alert finds it ready.
 
     Backgrounded rather than awaited on purpose: the very first load may also
-    fetch weights from the network, and startup must never block on that.
+    fetch weights from the network, and startup must never block on that. That
+    is also what keeps the platform health check answerable during a cold boot.
     """
     if not settings.warm_embedding_model_on_startup or settings.offline_mode:
         return None

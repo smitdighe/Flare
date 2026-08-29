@@ -57,6 +57,7 @@ class StoreSettings(BaseModel):
     chroma_persist_dir: Path
     chroma_collection: str
     embedding_model: str
+    embedding_backend: str
 
 
 class Settings(BaseSettings):
@@ -83,8 +84,8 @@ class Settings(BaseSettings):
     groq_quality_model: str = "llama-3.3-70b-versatile"
 
     google_api_key: str | None = None
-    # Phase 13: gemini-2.0-flash returns a PERMANENT 429 (quota limit: 0) on a
-    # free-tier key. gemini-flash-latest is what a free key can actually call.
+    # gemini-2.0-flash returns a PERMANENT 429 (quota limit: 0) on a free-tier
+    # key. gemini-flash-latest is what a free key can actually call.
     gemini_model: str = "gemini-flash-latest"
 
     abuseipdb_api_key: str | None = None
@@ -97,6 +98,19 @@ class Settings(BaseSettings):
     chroma_persist_dir: Path = Path("./data/chroma")
     chroma_collection: str = "mitre_attack"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Which runtime holds all-MiniLM-L6-v2's weights.
+    #
+    # "onnx" (default) uses the ONNX build chromadb ships with; "sentence-transformers"
+    # uses the torch build, which is an OPT-IN because torch costs ~400MB of RSS on
+    # top of the ~130MB the app already holds. A 512MB container running the torch
+    # path is killed by the OOM reaper seconds after boot — the process never gets
+    # far enough to answer a health check, so the symptom is a 502, not a traceback.
+    # Both paths embed the same model into the same 384 dimensions.
+    embedding_backend: str = "onnx"
+    # Where the ONNX weights are unpacked. Under ./data (not ~/.cache) so a build
+    # step that warms the model leaves it somewhere the runtime is guaranteed to
+    # find, rather than in a home directory the runtime may not inherit.
+    embedding_cache_dir: Path = Path("./data/onnx")
 
     dataset_path: Path = Path("./data/datasets")
     ground_truth_path: Path = Path("./data/labels")
@@ -107,13 +121,12 @@ class Settings(BaseSettings):
 
     enable_benchmark_mode: bool = False
 
-    # Offline demo mode (Phase 13). Every network leaf — both LLM tiers, both
+    # Offline demo mode. Every network leaf — both LLM tiers, both
     # intel sources, the embedding model — is served by deterministic in-process
     # stand-ins. The graph, routers, workers, queues, bus, DB and API are the
     # real ones, so the pipeline exercised is the production pipeline.
     offline_mode: bool = False
 
-    # Agent / LangGraph orchestration (Phase 8)
     ioc_escalation_score: int = 80
     enrich_low_severity: bool = False
     # Wall-clock budget for a FULL run_triage (classify -> recommend).
@@ -131,13 +144,12 @@ class Settings(BaseSettings):
     # calls stop_after="classify" and returns in ~2s — so this budget really only
     # bounds the full path (eval with enrichment on, seeding, demos).
     triage_timeout_seconds: float = 120.0
-    # Load the sentence-transformers model in the BACKGROUND at startup. Cold
-    # load is ~34s and, unwarmed, it lands inside the first alert's retrieve node
-    # and consumes the entire triage budget. Backgrounded, boot stays instant and
-    # the first alert is already warm.
+    # Load the embedding model in the BACKGROUND at startup. Cold load is ~34s on
+    # the torch backend and, unwarmed, it lands inside the first alert's retrieve
+    # node and consumes the entire triage budget. Backgrounded, boot stays instant
+    # and the first alert is already warm.
     warm_embedding_model_on_startup: bool = True
 
-    # Workers, queues & bus (Phase 9)
     event_bus_maxsize: int = 100
     triage_queue_maxsize: int = 1000
     enrich_queue_maxsize: int = 500
@@ -146,7 +158,6 @@ class Settings(BaseSettings):
     stats_publish_interval_seconds: float = 2.0
     worker_restart_cap_per_min: int = 5
 
-    # Evaluation harness (Phase 11)
     eval_sample_size: int = 200
     eval_max_sample_size: int = 2000
     eval_concurrency: int = 4
@@ -162,7 +173,6 @@ class Settings(BaseSettings):
     # LOUDLY rather than proceeding quietly. See app/evaluation/ground_truth.py.
     eval_min_label_rows: int = 50
 
-    # Provider benchmark (Phase 12)
     # Calls are sequential per tier and doubled across tiers, so the cap is low on
     # purpose: 50 alerts is already 100 live LLM calls.
     benchmark_max_sample: int = 50
@@ -171,7 +181,7 @@ class Settings(BaseSettings):
     # entirely to whichever tier happened to run first.
     benchmark_warmup: int = 2
 
-    # Stale-run reaping (Phase 13). A crashed process leaves an eval/benchmark row
+    # Stale-run reaping. A crashed process leaves an eval/benchmark row
     # in status=running forever, and the "already in flight" check then 409s every
     # subsequent POST /run permanently. A run whose started_at is older than this
     # is presumed dead and marked failed.
@@ -206,12 +216,23 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL must start with sqlite+aiosqlite")
         return v
 
-    @field_validator("chroma_persist_dir")
+    @field_validator("chroma_persist_dir", "embedding_cache_dir")
     @classmethod
     def _chroma_dir_abs(cls, v: Path) -> Path:
         p = Path(v).expanduser().resolve()
         p.mkdir(parents=True, exist_ok=True)
         return p
+
+    @field_validator("embedding_backend")
+    @classmethod
+    def _embedding_backend_known(cls, v: str) -> str:
+        backend = v.strip().lower()
+        if backend not in {"onnx", "sentence-transformers"}:
+            raise ValueError(
+                "EMBEDDING_BACKEND must be 'onnx' or 'sentence-transformers', "
+                f"got {v!r}"
+            )
+        return backend
 
     @field_validator("gemini_model")
     @classmethod
@@ -219,7 +240,7 @@ class Settings(BaseSettings):
         """Blank falls back to the working default; a zero-quota model warns loudly.
 
         Not an error: a paid key can call these. But silently shipping a model
-        that 429s on every call is exactly how Phase 11/12 lost a demo, so the
+        that 429s on every call is exactly how a demo gets lost, so the
         misconfiguration has to be audible at import time.
         """
         model = v.strip()
@@ -250,7 +271,6 @@ class Settings(BaseSettings):
                 stacklevel=2,
             )
         return model
-
 
     @property
     def is_dev(self) -> bool:
@@ -283,6 +303,7 @@ class Settings(BaseSettings):
             chroma_persist_dir=self.chroma_persist_dir,
             chroma_collection=self.chroma_collection,
             embedding_model=self.embedding_model,
+            embedding_backend=self.embedding_backend,
         )
 
     @property
