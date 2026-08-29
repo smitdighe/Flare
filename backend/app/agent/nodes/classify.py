@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic import Field
 
+from app.agent.sanitize import scrub_block, scrub_field
 from app.agent.state import TriageState, provider_for
 from app.agent.trace import NodeTrace, traced
 from app.core.logging import get_logger
@@ -51,14 +52,16 @@ class ClassificationResult(FlareModel):
 
 
 def _alert_block(alert: Any) -> str:
-    raw_excerpt = json.dumps(alert.raw, default=str)[:_RAW_EXCERPT_MAX]
+    # Every value below is sensor-supplied, i.e. attacker-influenced. scrub_field
+    # strips the newlines an injected payload needs to pose as a new instruction.
+    raw_excerpt = scrub_block(json.dumps(alert.raw, default=str), _RAW_EXCERPT_MAX)
     return (
         "Alert to classify:\n"
-        f"- signature: {alert.signature}\n"
-        f"- src_ip: {alert.src_ip}  src_port: {alert.src_port}\n"
-        f"- dst_ip: {alert.dst_ip}  dst_port: {alert.dst_port}\n"
-        f"- protocol: {alert.protocol}\n"
-        f"- source: {alert.source}\n"
+        f"- signature: {scrub_field(alert.signature)}\n"
+        f"- src_ip: {scrub_field(alert.src_ip)}  src_port: {alert.src_port}\n"
+        f"- dst_ip: {scrub_field(alert.dst_ip)}  dst_port: {alert.dst_port}\n"
+        f"- protocol: {scrub_field(alert.protocol)}\n"
+        f"- source: {scrub_field(alert.source)}\n"
         f"- raw excerpt: {raw_excerpt}"
     )
 

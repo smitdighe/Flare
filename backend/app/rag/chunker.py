@@ -32,10 +32,6 @@ class Chunk:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-def _word_count(text: str) -> int:
-    return len(text.split())
-
-
 def _split_section(text: str) -> list[str]:
     """Split only a long section, with word overlap; short sections stay whole."""
     words = text.split()

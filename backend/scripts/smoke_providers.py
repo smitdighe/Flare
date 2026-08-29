@@ -144,7 +144,9 @@ def _gemini_probe(key: str, model: str) -> tuple[int, str, float]:
     t0 = time.perf_counter()
     response = httpx.post(
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-        params={"key": key},
+        # Header, not ?key= — a query string lands in proxy and server access
+        # logs, and this is a live credential.
+        headers={"x-goog-api-key": key},
         json={
             "contents": [{"parts": [{"text": "Reply with the single word: pong"}]}],
             "generationConfig": {"maxOutputTokens": PROBE_MAX_TOKENS},

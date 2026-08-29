@@ -7,6 +7,7 @@ depends on network access to attack.mitre.org at runtime.
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
@@ -45,7 +46,8 @@ ATTACK_TYPE_TO_TECHNIQUES: dict[AttackType, list[str]] = {
 }
 
 
-def load_corpus() -> list[TechniqueDoc]:
+@lru_cache(maxsize=1)
+def _load_corpus_cached() -> tuple[TechniqueDoc, ...]:
     """Read and validate every technique JSON. Fail loudly with the filename."""
     files = sorted(CORPUS_DIR.glob("*.json"))
     if not files:
@@ -58,7 +60,16 @@ def load_corpus() -> list[TechniqueDoc]:
             docs.append(TechniqueDoc.model_validate(raw))
         except (json.JSONDecodeError, ValidationError) as exc:
             raise ValueError(f"malformed corpus document {path.name}: {exc}") from exc
-    return docs
+    return tuple(docs)
+
+
+def load_corpus() -> list[TechniqueDoc]:
+    """Every validated technique doc. Parsed once; the corpus is read-only.
+
+    Returns a fresh list over the cached docs so a caller that mutates its own
+    result cannot corrupt the cache.
+    """
+    return list(_load_corpus_cached())
 
 
 def techniques_for(attack_type: AttackType | None) -> list[str]:

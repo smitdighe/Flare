@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from app.agent.sanitize import scrub_field
 from app.agent.state import TriageState, provider_for
 from app.agent.trace import NodeTrace, traced
 from app.core.logging import get_logger
@@ -59,11 +60,13 @@ def _prompt_for(state: TriageState) -> str:
     alert = state["alert"]
     severity = state.get("severity")
     attack_type = state.get("attack_type")
+    # Sensor-supplied, therefore attacker-influenced — see app.agent.sanitize.
     header = (
         "Alert under analysis:\n"
-        f"- signature: {alert.signature}\n"
-        f"- src_ip: {alert.src_ip}:{alert.src_port} -> dst_ip: {alert.dst_ip}:{alert.dst_port}\n"
-        f"- protocol: {alert.protocol}\n"
+        f"- signature: {scrub_field(alert.signature)}\n"
+        f"- src_ip: {scrub_field(alert.src_ip)}:{alert.src_port}"
+        f" -> dst_ip: {scrub_field(alert.dst_ip)}:{alert.dst_port}\n"
+        f"- protocol: {scrub_field(alert.protocol)}\n"
         f"- classified severity: {severity.value if severity else 'unknown'}\n"
         f"- classified attack_type: {attack_type.value if attack_type else 'unknown'}"
     )

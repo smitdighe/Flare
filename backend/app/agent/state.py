@@ -18,6 +18,7 @@ import operator
 from typing import TYPE_CHECKING, Annotated, Any, TypedDict
 
 from app.schemas import (
+    SEVERITY_RANK,
     AlertStatus,
     AttackType,
     IocVerdict,
@@ -59,13 +60,6 @@ class TriageState(TypedDict, total=False):
 
 PIPELINE_NODES: tuple[str, ...] = ("classify", "enrich", "retrieve", "reason", "recommend")
 
-SEVERITY_RANK: dict[Severity, int] = {
-    Severity.INFO: 1,
-    Severity.LOW: 2,
-    Severity.MEDIUM: 3,
-    Severity.HIGH: 4,
-    Severity.CRITICAL: 5,
-}
 
 
 def severity_rank(severity: Severity | None) -> int:

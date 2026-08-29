@@ -16,6 +16,10 @@ from chromadb.api.models.Collection import Collection
 from app.config import get_settings
 
 _client: ClientAPI | None = None
+#: get_or_create_collection is a Chroma sqlite round trip. It ran on every
+#: retrieve (i.e. every alert); the handle is stable for a given client, so
+#: it is created once and dropped whenever the client is.
+_collection: Collection | None = None
 
 
 def _build_client() -> ClientAPI:
@@ -32,11 +36,14 @@ def get_client() -> ClientAPI:
 
 
 def _get_collection_sync() -> Collection:
-    settings = get_settings()
-    return get_client().get_or_create_collection(
-        name=settings.chroma_collection,
-        metadata={"hnsw:space": "cosine"},
-    )
+    global _collection
+    if _collection is None:
+        settings = get_settings()
+        _collection = get_client().get_or_create_collection(
+            name=settings.chroma_collection,
+            metadata={"hnsw:space": "cosine"},
+        )
+    return _collection
 
 
 async def get_collection() -> Collection:
@@ -69,13 +76,21 @@ def _close_client_sync() -> None:
         try:
             closer()
             return
-        except Exception:  # noqa: BLE001 — best effort on the way out
+        except Exception as exc:  # noqa: BLE001 — best effort on the way out
+            _log_close_failure(method, exc)
             continue
+    _log_close_failure("all", RuntimeError("no usable closer on the Chroma client"))
+
+
+def _log_close_failure(method: str, exc: BaseException) -> None:
+    from app.core.logging import get_logger
+
+    get_logger(__name__).warning("chroma.closer_failed", method=method, error=str(exc))
 
 
 async def close_client() -> None:
     """Release the Chroma client's resources on shutdown. Never raises."""
-    global _client
+    global _client, _collection
     if _client is None:
         return
     try:
@@ -86,9 +101,4 @@ async def close_client() -> None:
         get_logger(__name__).warning("chroma.close_failed", error=str(exc))
     finally:
         _client = None
-
-
-def reset_client() -> None:
-    """Drop the cached client (mainly for tests)."""
-    global _client
-    _client = None
+        _collection = None

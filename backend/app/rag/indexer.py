@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import threading
 import time
 from datetime import UTC, datetime
 from functools import partial
@@ -22,40 +23,28 @@ from app.rag.mitre_loader import load_corpus
 log = get_logger(__name__)
 
 _model: Any = None
+#: Lazy load takes tens of seconds. Without the lock a request racing the
+#: startup warmup builds a SECOND model — double load, double resident memory.
+_model_lock = threading.Lock()
 _PROGRESS_EVERY = 25
 
 
 class OnnxEmbedder:
     """all-MiniLM-L6-v2 through chromadb's bundled ONNX runtime.
 
-    Same weights and the same 384-dim output as the sentence-transformers build,
-    without importing torch. That matters because torch is ~400MB of resident
-    memory on its own; on top of the ~130MB the app already holds it puts a
-    512MB container over the line and the process is OOM-killed during startup,
-    long before it can answer a health check.
-
-    Only ``encode`` is implemented, because ``encode`` is the entire surface the
-    rest of the codebase uses of a SentenceTransformer. Keeping the signature
-    identical (including the ignored ``show_progress_bar``) is what lets
-    :func:`get_embedding_model` swap backends without any caller knowing.
+    Same weights and 384-dim output as the sentence-transformers build, without
+    importing torch (~400MB resident, enough to OOM a 512MB container).
     """
 
     def __init__(self) -> None:
         from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
 
         self._fn = ONNXMiniLM_L6_V2()
-        # Instance-level override of the class attribute chromadb downloads into.
-        # Its default is ~/.cache; pinning it under the app's own data directory
-        # means a build step that warms the model leaves the weights where the
-        # runtime is certain to find them.
+        # Pin weights under the app's data dir instead of ~/.cache so a build
+        # step that warms the model leaves them where the runtime looks.
         self._fn.DOWNLOAD_PATH = get_settings().embedding_cache_dir
-        # Embed one throwaway string so construction really does leave the model
-        # resident. chromadb downloads the weights and builds the ORT session
-        # lazily, on first call — without this the startup warmup would return in
-        # milliseconds having loaded nothing, and the whole cost would land in
-        # the first alert's retrieve node, which is exactly what the warmup
-        # exists to prevent. Constructing a SentenceTransformer loads eagerly, so
-        # this is also what keeps the two backends behaving the same way.
+        # Force eager load — chromadb builds the ORT session lazily, so without
+        # this the startup warmup returns having loaded nothing.
         self._fn(["warmup"])
 
     def encode(self, texts: Any, show_progress_bar: bool = False) -> Any:  # noqa: ARG002
@@ -74,13 +63,15 @@ def get_embedding_model() -> Any:
     """
     global _model
     if _model is None:
-        settings = get_settings()
-        if settings.embedding_backend == "sentence-transformers":
-            from sentence_transformers import SentenceTransformer
+        with _model_lock:
+            if _model is None:
+                settings = get_settings()
+                if settings.embedding_backend == "sentence-transformers":
+                    from sentence_transformers import SentenceTransformer
 
-            _model = SentenceTransformer(settings.embedding_model)
-        else:
-            _model = OnnxEmbedder()
+                    _model = SentenceTransformer(settings.embedding_model)
+                else:
+                    _model = OnnxEmbedder()
     return _model
 
 
@@ -91,12 +82,7 @@ def reset_embedding_model() -> None:
 
 
 def embedding_model_id() -> str:
-    """Identifier stamped into the collection metadata and /health/deep.
-
-    Names the BACKEND as well as the model, because "which weights built this
-    index" is the question that matters when a rebuilt index stops matching the
-    queries being run against it.
-    """
+    """Identifier stamped into collection metadata and /health/deep."""
     settings = get_settings()
     if settings.embedding_backend == "sentence-transformers":
         return settings.embedding_model
@@ -131,13 +117,7 @@ def _embed_all(texts: list[str]) -> list[list[float]]:
 
 
 async def build_index(force: bool = False, collection: Any = None) -> dict[str, Any]:
-    """Build/refresh the index. Every chromadb and file call goes to a thread.
-
-    chromadb's client and the corpus reader are both synchronous; run bare in a
-    coroutine they block the loop for the whole index build (tens of seconds on
-    a cold embedding model), which stalls the API if this is ever triggered from
-    a running app rather than the CLI.
-    """
+    """Build/refresh the index. Every chromadb and file call goes to a thread."""
     t0 = time.perf_counter()
     docs = await asyncio.to_thread(load_corpus)
     chunks = chunk_corpus(docs)

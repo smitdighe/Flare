@@ -39,9 +39,9 @@ def _stage_ms(snap: TriageState, node: str) -> int:
 
 async def _publish_updated(ctx: WorkerContext, alert_id: str) -> None:
     async with ctx.session_factory() as session:
-        detail = await ctx.repo.get(session, alert_id)
-    if detail is not None:
-        ctx.bus.publish(AlertUpdatedEvent(data=detail.to_summary()))
+        summary = await ctx.repo.get_summary(session, alert_id)
+    if summary is not None:
+        ctx.bus.publish(AlertUpdatedEvent(data=summary))
 
 
 async def _persist_enriched(ctx: WorkerContext, alert_id: str, snap: TriageState) -> None:

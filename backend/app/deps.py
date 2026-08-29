@@ -13,9 +13,9 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.errors import QueueFullError
 from app.core.bus import EventBus, get_event_bus
 from app.ingestion.replay import ReplayEngine
-from app.store.chroma import get_collection
 from app.store.db import get_session
 from app.store.repositories import (
     AlertRepository,
@@ -51,11 +51,6 @@ def get_benchmark_repo() -> BenchmarkRunRepository:
     return BenchmarkRunRepository()
 
 
-async def get_chroma():  # noqa: ANN201 — chroma Collection type is dynamic
-    """Yield the shared Chroma collection."""
-    return await get_collection()
-
-
 def get_bus() -> EventBus:
     """The process-wide event bus (workers publish, /stream subscribes)."""
     return get_event_bus()
@@ -73,8 +68,6 @@ def get_replay_engine(request: Request) -> ReplayEngine:
     """The replay engine built by the lifespan. 503 if the app isn't running one."""
     engine = getattr(request.app.state, "replay_engine", None)
     if engine is None:
-        from app.api.errors import QueueFullError
-
         raise QueueFullError("replay engine is not running")
     return engine
 

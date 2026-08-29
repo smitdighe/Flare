@@ -38,7 +38,10 @@ def get_engine() -> AsyncEngine:
     if _engine is None:
         settings = get_settings()
         _engine = create_async_engine(settings.database_url, future=True)
-        event.listen(_engine.sync_engine, "connect", _apply_sqlite_pragmas)
+        # PRAGMA is SQLite-only syntax; registering it unconditionally makes any
+        # other dialect fail on its first connect.
+        if _engine.dialect.name == "sqlite":
+            event.listen(_engine.sync_engine, "connect", _apply_sqlite_pragmas)
         _sessionmaker = async_sessionmaker(
             _engine, expire_on_commit=False, class_=AsyncSession
         )

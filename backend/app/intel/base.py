@@ -22,6 +22,11 @@ from app.providers.base import ProviderHealth
 
 log = get_logger(__name__)
 
+#: How much of a failing response body travels with the error. Enough to
+#: identify the fault, short enough that an error payload cannot become a log
+#: flood — and defined once, because it was written out at every raise site.
+_DETAIL_CHARS = 300
+
 
 @runtime_checkable
 class IntelSource(Protocol):
@@ -101,13 +106,14 @@ class HttpIntelClient:
         if resp.status_code == 401 or resp.status_code == 403:
             raise ProviderError(
                 f"{self._name} authentication failed — check {key_env}",
-                detail=resp.text[:300],
+                detail=resp.text[:_DETAIL_CHARS],
             )
         if resp.status_code == 429:
-            raise RateLimitedError(f"{self._name} rate limit hit", detail=resp.text[:300])
+            raise RateLimitedError(f"{self._name} rate limit hit", detail=resp.text[:_DETAIL_CHARS])
         if resp.status_code != 200:
             raise ProviderError(
-                f"{self._name} unexpected status {resp.status_code}", detail=resp.text[:300]
+                f"{self._name} unexpected status {resp.status_code}",
+                detail=resp.text[:_DETAIL_CHARS],
             )
 
     @staticmethod
@@ -116,10 +122,12 @@ class HttpIntelClient:
             data = resp.json()
         except (ValueError, httpx.DecodingError):
             raise ProviderError(
-                "malformed JSON from intel source", detail=resp.text[:300]
+                "malformed JSON from intel source", detail=resp.text[:_DETAIL_CHARS]
             ) from None
         if not isinstance(data, dict):
-            raise ProviderError("intel source returned non-object JSON", detail=str(data)[:300])
+            raise ProviderError(
+                "intel source returned non-object JSON", detail=str(data)[:_DETAIL_CHARS]
+            )
         return data
 
     async def lookup_hash(self, h: str) -> SourceVerdict | None:  # noqa: ARG002

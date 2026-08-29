@@ -20,6 +20,7 @@ class FlareModel(BaseModel):
 
 
 from app.schemas.alert import (  # noqa: E402
+    SEVERITY_RANK,
     AlertDetail,
     AlertStats,
     AlertStatus,
@@ -74,6 +75,7 @@ __all__ = [
     "MitreTechnique",
     "RemediationStep",
     "Remediation",
+    "SEVERITY_RANK",
     "Severity",
     "AlertStatus",
     "AttackType",

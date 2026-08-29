@@ -14,9 +14,11 @@ from typing import TypeVar
 
 from sqlalchemy import Select, case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer, lazyload
 from sqlalchemy.sql.elements import Case
 
 from app.schemas import (
+    SEVERITY_RANK,
     AlertDetail,
     AlertStats,
     AlertStatus,
@@ -48,6 +50,21 @@ MALICIOUS_SCORE_THRESHOLD = 50.0
 #: the sweeper, the API and the tests all assert on ONE string.
 STALE_RUN_ERROR = "stale: exceeded timeout, likely crashed process"
 
+#: /evaluation/runs and /benchmark/runs are newest-first history lists with no
+#: pagination. Unbounded, every request hydrated every JSON report blob ever
+#: written; the history panel shows far fewer rows than this.
+_RUN_HISTORY_LIMIT = 100
+
+#: ``Alert.traces`` is ``lazy="selectin"`` because the detail view needs it. A
+#: summary never reads it, so summary queries opt out — otherwise a 50-row page
+#: also pulls every trace row for those 50 alerts.
+_SUMMARY_ONLY_LOAD = lazyload(models.Alert.traces)
+
+
+async def ping(session: AsyncSession) -> None:
+    """Cheapest possible liveness round trip. Raises if the DB is unreachable."""
+    await session.execute(select(1))
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -56,12 +73,10 @@ def _now() -> datetime:
 def _severity_rank_case() -> Case:
     """SQL ordering that matches the app's Python severity ordering exactly.
 
-    Built from ``app.agent.state.SEVERITY_RANK`` rather than a second hand-kept
+    Built from ``app.schemas.SEVERITY_RANK`` rather than a second hand-kept
     table: two rankings that drift make the `-severity` sort disagree with every
     in-process comparison, and nothing would fail loudly when they do.
     """
-    from app.agent.state import SEVERITY_RANK
-
     return case(
         *[
             (models.Alert.severity == severity.value, rank)
@@ -224,6 +239,21 @@ class AlertRepository:
             return None
         return _detail_from_alert(row)
 
+    async def get_summary(self, session: AsyncSession, alert_id: str) -> AlertSummary | None:
+        """The feed-shaped view of one alert, without the detail-only payloads.
+
+        The workers publish a summary after every stage. Going through ``get``
+        loaded the whole ``AlertDetail`` — an extra query for the trace rows plus
+        a decode of the raw event blob — and threw all of it away.
+        """
+        stmt = (
+            select(models.Alert)
+            .options(_SUMMARY_ONLY_LOAD, defer(models.Alert.raw))
+            .where(models.Alert.id == alert_id)
+        )
+        row = (await session.execute(stmt)).scalars().first()
+        return _summary_from_alert(row) if row is not None else None
+
     def _apply_filters(self, stmt: Select, f: AlertFilters) -> Select:
         if f.severity:
             stmt = stmt.where(models.Alert.severity.in_(f.severity))
@@ -254,7 +284,7 @@ class AlertRepository:
         count_stmt = self._apply_filters(select(func.count(models.Alert.id)), f)
         total = (await session.execute(count_stmt)).scalar_one()
 
-        stmt = self._apply_filters(select(models.Alert), f)
+        stmt = self._apply_filters(select(models.Alert), f).options(_SUMMARY_ONLY_LOAD)
         if sort == "timestamp":
             stmt = stmt.order_by(models.Alert.timestamp.asc())
         elif sort == "-severity":
@@ -556,7 +586,9 @@ class EvalRunRepository:
 
     async def list(self, session: AsyncSession) -> builtins.list[EvalRunDetail]:
         res = await session.execute(
-            select(models.EvalRun).order_by(models.EvalRun.started_at.desc())
+            select(models.EvalRun)
+            .order_by(models.EvalRun.started_at.desc())
+            .limit(_RUN_HISTORY_LIMIT)
         )
         return [_eval_detail(r) for r in res.scalars().all()]
 
@@ -641,7 +673,9 @@ class BenchmarkRunRepository:
 
     async def list(self, session: AsyncSession) -> builtins.list[BenchmarkRunDetail]:
         res = await session.execute(
-            select(models.BenchmarkRun).order_by(models.BenchmarkRun.started_at.desc())
+            select(models.BenchmarkRun)
+            .order_by(models.BenchmarkRun.started_at.desc())
+            .limit(_RUN_HISTORY_LIMIT)
         )
         return [_benchmark_detail(r) for r in res.scalars().all()]
 

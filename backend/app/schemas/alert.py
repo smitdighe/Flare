@@ -25,6 +25,18 @@ class Severity(str, Enum):
     INFO = "info"
 
 
+#: The one ordering of Severity in the system. It lives here, next to the enum,
+#: because the persistence layer sorts by it and the agent layer compares by it:
+#: defining it in either one forces the other to import across a layer boundary.
+SEVERITY_RANK: dict[Severity, int] = {
+    Severity.INFO: 1,
+    Severity.LOW: 2,
+    Severity.MEDIUM: 3,
+    Severity.HIGH: 4,
+    Severity.CRITICAL: 5,
+}
+
+
 class AlertStatus(str, Enum):
     INGESTED = "ingested"
     CLASSIFIED = "classified"
