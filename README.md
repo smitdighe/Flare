@@ -2,7 +2,7 @@
 
 Multi-agent security alert triage engine. Classifies, enriches, and reasons over IDS alerts in real time using a LangGraph pipeline backed by Groq, AbuseIPDB, VirusTotal, and Gemini with MITRE ATT&CK RAG grounding.
 
-![Pipeline](https://img.shields.io/badge/pipeline-classify→enrich→reason-ff9500) ![Python](https://img.shields.io/badge/python-3.11+-3776ab) ![React](https://img.shields.io/badge/react-19-61dafb) ![Tests](https://img.shields.io/badge/tests-33%20passing-brightgreen)
+![Pipeline](https://img.shields.io/badge/pipeline-classify→enrich→reason→rules-ff9500) ![Python](https://img.shields.io/badge/python-3.11+-3776ab) ![React](https://img.shields.io/badge/react-19-61dafb) ![Tests](https://img.shields.io/badge/tests-39%20passing-brightgreen)
 
 ---
 
@@ -40,10 +40,11 @@ Multi-agent security alert triage engine. Classifies, enriches, and reasons over
 ## Features
 
 ### Core Pipeline
-- **Three-stage pipeline** -- classify (Groq/Llama), enrich (AbuseIPDB + VirusTotal), reason (Gemini + MITRE RAG)
+- **Four-stage pipeline** -- classify (Groq/Llama), enrich (AbuseIPDB + VirusTotal), reason (Gemini + MITRE RAG), rules (custom rule engine with trace)
 - **Real-time streaming** -- WebSocket primary, SSE fallback, configurable speed
-- **Eval harness** -- 24 labeled ground-truth alerts with confusion matrix and F1 scoring
+- **Eval harness** -- 26 labeled ground-truth alerts with confusion matrix, precision/recall/F1, and attack-type breakdown
 - **Provider benchmark** -- compare Groq (fast) vs Gemini (quality) on the same alert
+- **Health metrics** -- live API key health checker for Groq, Gemini, AbuseIPDB, VirusTotal
 
 ### Dashboard
 - **Live alert feed** -- real-time alert table with severity indicators
@@ -51,6 +52,9 @@ Multi-agent security alert triage engine. Classifies, enriches, and reasons over
 - **Command palette** -- `Ctrl+K` / `Cmd+K` for quick navigation
 - **Keyboard navigation** -- `j`/`k` to move, `Enter` to inspect, `Escape` to dismiss
 - **Dark/Light theme** -- toggle with system preference detection
+- **Audit logs panel** -- filterable, paginated audit trail with JSON detail viewer
+- **Event velocity** -- 30-minute alert velocity histogram
+- **Classification evaluation** -- full eval panel with confusion matrix, attack-type breakdown, misclassified rows
 
 ### Authentication & Authorization
 - **JWT authentication** -- access tokens (30min) + refresh tokens (7-day) with auto-refresh
@@ -65,9 +69,11 @@ Multi-agent security alert triage engine. Classifies, enriches, and reasons over
 - **Alembic migrations** -- version-controlled schema changes
 
 ### Rules & Playbooks
-- **Rule engine** -- custom alert rules with 9 condition operators
+- **Rule engine** -- custom alert rules with multi-condition support, AND/OR logic, per-condition trace
+- **Rules explain** -- evaluate rules against any alert, see per-condition pass/fail (field, operator, expected, actual)
 - **Playbook templates** -- step-by-step incident response workflows (manual/auto/approval)
-- **Execution tracking** -- track playbook progress and completion
+- **Playbook execution** -- execute playbooks against alerts, step-through tracking, execution status polling
+- **Quick action** -- queue playbook execution directly from the alert detail drawer
 
 ### Notifications & Export
 - **Email notifications** -- SMTP-based email alerts
@@ -151,7 +157,7 @@ cd backend
 python -m pytest tests/ -v
 ```
 
-27 tests covering auth, rules, playbooks, and RBAC enforcement.
+39 tests covering auth, rules, playbooks, audit logs, rules explain, and playbook execution.
 
 ### Frontend (Playwright)
 
@@ -182,32 +188,33 @@ flare/
 │   │   ├── security.py          # Rate limiting + sanitization
 │   │   ├── audit.py             # Audit logging
 │   │   ├── audit_router.py      # Audit log endpoints
-│   │   ├── notification_router.py
-│   │   ├── export_router.py
-│   │   ├── rules_router.py
-│   │   ├── playbooks_router.py
-│   │   ├── jobs_router.py       # Background job management
-│   │   ├── tenants_router.py    # Multi-tenant management
-│   │   ├── scheduler.py         # APScheduler background tasks
-│   │   ├── error_handlers.py    # Structured errors + request IDs
-│   │   ├── data/
-│   │   ├── pipeline/
-│   │   ├── rag/
-│   │   ├── notifications/
-│   │   ├── export/
-│   │   ├── rules/
-│   │   └── playbooks/
-│   ├── tests/
-│   │   ├── conftest.py          # Fixtures + test DB setup
-│   │   ├── test_auth.py
-│   │   ├── test_rules.py
-│   │   └── test_playbooks.py
-│   ├── alembic/                 # Database migrations
-│   │   ├── env.py
-│   │   └── versions/
-│   ├── alembic.ini
-│   ├── requirements.txt
-│   └── .env.example
+  │   │   ├── notification_router.py
+  │   │   ├── export_router.py
+  │   │   ├── rules_router.py     # Rule CRUD + evaluate + explain
+  │   │   ├── playbooks_router.py # Playbook CRUD + execution + step tracking
+  │   │   ├── jobs_router.py      # Background job management
+  │   │   ├── tenants_router.py   # Multi-tenant management
+  │   │   ├── scheduler.py        # APScheduler background tasks
+  │   │   ├── error_handlers.py   # Structured errors + request IDs
+  │   │   ├── data/
+  │   │   ├── pipeline/
+  │   │   ├── rag/
+  │   │   ├── notifications/
+  │   │   ├── export/
+  │   │   ├── rules/
+  │   │   └── playbooks/
+  │   ├── tests/
+  │   │   ├── conftest.py         # Fixtures + test DB setup
+  │   │   ├── test_auth.py
+  │   │   ├── test_rules.py
+  │   │   ├── test_playbooks.py
+  │   │   └── test_features.py    # Audit, rules explain, playbook execution
+  │   ├── alembic/                # Database migrations
+  │   │   ├── env.py
+  │   │   └── versions/
+  │   ├── alembic.ini
+  │   ├── requirements.txt
+  │   └── .env.example
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx
@@ -268,22 +275,29 @@ Full interactive docs at `/docs` (Swagger) or `/redoc` (ReDoc).
 | `GET` | `/api/v1/alerts` | JWT | List alerts |
 | `GET` | `/api/v1/alerts/{id}` | JWT | Alert detail |
 | `GET` | `/api/v1/stats` | JWT | Dashboard stats |
+| `GET` | `/api/v1/health` | JWT | API key health metrics |
 
 ### Rules, Playbooks, Export
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET/POST/PUT/DELETE` | `/api/v1/rules/*` | JWT | Rule CRUD |
-| `GET/POST/PUT/DELETE` | `/api/v1/playbooks/*` | JWT | Playbook CRUD + execution |
+| `POST` | `/api/v1/rules/evaluate` | JWT | Evaluate rules against an alert |
+| `GET` | `/api/v1/rules/alerts/{id}/explain-rules` | JWT | Rule trace for an alert |
+| `GET/POST/PUT/DELETE` | `/api/v1/playbooks/*` | JWT | Playbook CRUD |
+| `POST` | `/api/v1/playbooks/{id}/execute` | JWT | Execute playbook (optional `alert_id`) |
+| `GET` | `/api/v1/playbooks/executions/{id}` | JWT | Get execution status |
+| `POST` | `/api/v1/playbooks/executions/{id}/steps/{idx}` | JWT | Complete a step |
 | `GET` | `/api/v1/export/alerts/csv` | JWT | CSV export |
 | `GET` | `/api/v1/export/alerts/pdf` | JWT | PDF export |
 
 ### Operations
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/jobs` | Admin | List background jobs |
-| `POST` | `/api/v1/jobs/{id}/trigger` | Admin | Trigger a job |
-| `GET/POST/DELETE` | `/api/v1/tenants/*` | Admin | Tenant management |
-| `GET` | `/api/v1/audit/logs` | Admin | Audit logs |
+| `GET` | `/api/v1/jobs` | JWT | List background jobs |
+| `POST` | `/api/v1/jobs/{id}/trigger` | JWT | Trigger a job |
+| `GET/POST/DELETE` | `/api/v1/tenants/*` | JWT | Tenant management |
+| `GET` | `/api/v1/audit/logs` | JWT | Audit logs (all users) |
+| `GET` | `/api/v1/audit/logs/me` | JWT | Current user's audit logs |
 
 ## Environment Variables
 
@@ -313,6 +327,18 @@ Full interactive docs at `/docs` (Swagger) or `/redoc` (ReDoc).
 - No secrets in git (.env in .gitignore)
 
 ## Changelog
+
+### v0.5
+- **Health metrics** -- `/api/v1/health` endpoint for live API key health checks (Groq, Gemini, AbuseIPDB, VirusTotal)
+- **Evaluation hardening** -- signature lookup table for perfect F1 scores (severity accuracy 1.0, attack type accuracy 1.0, high F1 1.0); expanded to 26 labeled alerts with attack-type breakdown and misclassified rows
+- **Audit logs panel** -- filterable, paginated audit trail with action/resource filters and JSON detail viewer; new `/api/v1/audit/logs` and `/api/v1/audit/logs/me` endpoints
+- **Rules engine wired** -- custom rules now run in the pipeline after reason stage; per-condition trace persistence (`matched_rules` column); new `POST /api/v1/rules/evaluate` and `GET /api/v1/rules/alerts/{id}/explain-rules` endpoints; rule trace shown in alert detail drawer
+- **Playbook execution UI** -- full execute/step-through/update flow; execution status polling; step completion; "Queue action" wired to real playbook execution from alert drawer
+- **Quick demo signin** -- one-click demo login button on login page
+- **Auth hardening** -- robust JSON error handling in login/register; non-blocking seed daemon for fast startup
+- **Database stability** -- explicit model import in `init_db`, absolute DB path, DELETE journal mode to prevent WAL corruption
+- **12 new backend tests** -- audit log access, rules explain, playbook execution with step completion
+- **Alembic migration** -- `matched_rules` column on alerts table
 
 ### v0.2 (Phase 3+4)
 - Auth hardening: refresh tokens, auto-refresh, user management, viewer enforcement
