@@ -10,24 +10,62 @@ const API_BASE = import.meta.env.VITE_API_BASE || '';
 function HealthPanel() {
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchHealth = async () => {
+    try {
+      const token = localStorage.getItem('flare_token');
+      const res = await fetch(`${API_BASE}/api/v1/health`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        if (res.status === 401) throw new Error('Authentication required — please log in again.');
+        if (res.status === 403) throw new Error('Access denied.');
+        const body = await res.text();
+        throw new Error(body || `Health check failed: ${res.status}`);
+      }
+      const json = await res.json();
+      setHealth(json.data || json);
+      setError(null);
+    } catch (err) {
+      setError(err.message || 'Failed to load health data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_BASE}/api/v1/health`)
-      .then((res) => res.json())
-      .then((json) => { if (!cancelled) { setHealth(json.data || json); setLoading(false); } })
-      .catch(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    fetchHealth();
+    const id = setInterval(fetchHealth, 30000);
+    return () => clearInterval(id);
   }, []);
 
   if (loading) {
     return (
       <section className="dashboard-panel">
-        <div className="border-b border-line-strong px-4 py-4">
-          <div className="eyebrow text-ash-dark">External dependencies</div>
-          <h2 className="mt-1 text-base font-semibold text-paper">Health metrics</h2>
+        <div className="flex items-center justify-between border-b border-line-strong px-4 py-4">
+          <div>
+            <div className="eyebrow text-ash-dark">External dependencies</div>
+            <h2 className="mt-1 text-base font-semibold text-paper">Health metrics</h2>
+          </div>
+          <button type="button" onClick={fetchHealth} className="font-mono-ui text-[10px] text-amber hover:text-amber/80">Refresh</button>
         </div>
         <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-ash-dark">Loading health data...</div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="dashboard-panel">
+        <div className="flex items-center justify-between border-b border-line-strong px-4 py-4">
+          <div>
+            <div className="eyebrow text-ash-dark">External dependencies</div>
+            <h2 className="mt-1 text-base font-semibold text-paper">Health metrics</h2>
+          </div>
+          <button type="button" onClick={() => { setLoading(true); setError(null); fetchHealth(); }} className="font-mono-ui text-[10px] text-amber hover:text-amber/80">Retry</button>
+        </div>
+        <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-red">{error}</div>
       </section>
     );
   }
@@ -35,9 +73,12 @@ function HealthPanel() {
   const services = health?.services || [];
   return (
     <section className="dashboard-panel">
-      <div className="border-b border-line-strong px-4 py-4">
-        <div className="eyebrow text-ash-dark">External dependencies</div>
-        <h2 className="mt-1 text-base font-semibold text-paper">Health metrics</h2>
+      <div className="flex items-center justify-between border-b border-line-strong px-4 py-4">
+        <div>
+          <div className="eyebrow text-ash-dark">External dependencies</div>
+          <h2 className="mt-1 text-base font-semibold text-paper">Health metrics</h2>
+        </div>
+        <button type="button" onClick={fetchHealth} className="font-mono-ui text-[10px] text-amber hover:text-amber/80">Refresh</button>
       </div>
       <div className="divide-y divide-line">
         {services.map((service, index) => {
@@ -59,7 +100,7 @@ function HealthPanel() {
                 </div>
               </div>
               <div className={`font-mono-ui text-[10px] ${toneColor}`}>
-                {service.latency_ms ? `${service.latency_ms}ms` : service.status?.toUpperCase()}
+                {service.latency_ms != null ? `${service.latency_ms}ms` : service.status?.toUpperCase()}
               </div>
             </motion.div>
           );
@@ -75,14 +116,31 @@ function HealthPanel() {
 function TimelinePanel() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchStats = async () => {
+    try {
+      const token = localStorage.getItem('flare_token');
+      const res = await fetch(`${API_BASE}/api/v1/stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        if (res.status === 401) throw new Error('Authentication required — please log in again.');
+        if (res.status === 403) throw new Error('Access denied.');
+        throw new Error(`Failed to load timeline: ${res.status}`);
+      }
+      const json = await res.json();
+      setStats(json.data || json);
+      setError(null);
+    } catch (err) {
+      setError(err.message || 'Failed to load timeline');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_BASE}/api/v1/stats`)
-      .then((res) => res.json())
-      .then((json) => { if (!cancelled) { setStats(json.data || json); setLoading(false); } })
-      .catch(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    fetchStats();
   }, []);
 
   const timeline = stats?.timeline || [];
@@ -95,10 +153,25 @@ function TimelinePanel() {
         <div className="flex items-end justify-between border-b border-line-strong px-4 py-4">
           <div>
             <div className="eyebrow text-ash-dark">30 minute window</div>
-            <h2 className="mt-1 text-base font-semibold text-paper">System logs / event velocity</h2>
+            <h2 className="mt-1 text-base font-semibold text-paper">Event velocity</h2>
           </div>
         </div>
         <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-ash-dark">Loading timeline...</div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="dashboard-panel">
+        <div className="flex items-end justify-between border-b border-line-strong px-4 py-4">
+          <div>
+            <div className="eyebrow text-ash-dark">30 minute window</div>
+            <h2 className="mt-1 text-base font-semibold text-paper">Event velocity</h2>
+          </div>
+          <button type="button" onClick={() => { setLoading(true); setError(null); fetchStats(); }} className="font-mono-ui text-[10px] text-amber hover:text-amber/80">Retry</button>
+        </div>
+        <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-red">{error}</div>
       </section>
     );
   }
@@ -108,7 +181,7 @@ function TimelinePanel() {
       <div className="flex items-end justify-between border-b border-line-strong px-4 py-4">
         <div>
           <div className="eyebrow text-ash-dark">30 minute window</div>
-          <h2 className="mt-1 text-base font-semibold text-paper">System logs / event velocity</h2>
+          <h2 className="mt-1 text-base font-semibold text-paper">Event velocity</h2>
         </div>
         <span className="font-mono-ui text-[10px] text-amber">{velocity} alerts/min</span>
       </div>
@@ -143,17 +216,157 @@ function TimelinePanel() {
   );
 }
 
+function AuditLogsPanel() {
+  const [logs, setLogs] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [offset, setOffset] = useState(0);
+  const [actionFilter, setActionFilter] = useState('');
+  const [resourceFilter, setResourceFilter] = useState('');
+  const [expanded, setExpanded] = useState(null);
+
+  const limit = 25;
+
+  const fetchLogs = async (reset = false) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('flare_token');
+      const params = new URLSearchParams({ limit: String(limit), offset: String(reset ? 0 : offset) });
+      if (actionFilter) params.set('action', actionFilter);
+      if (resourceFilter) params.set('resource_type', resourceFilter);
+      const adminRes = await fetch(`${API_BASE}/api/v1/audit/logs?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      let data;
+      if (adminRes.status === 403) {
+        const meRes = await fetch(`${API_BASE}/api/v1/audit/logs/me?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!meRes.ok) throw new Error(`Failed to load audit logs: ${meRes.status}`);
+        data = await meRes.json();
+      } else if (!adminRes.ok) {
+        throw new Error(`Failed to load audit logs: ${adminRes.status}`);
+      } else {
+        data = await adminRes.json();
+      }
+      const payload = data.data || data;
+      setLogs(payload.logs || []);
+      setTotal(payload.total || 0);
+    } catch (err) {
+      setError(err.message || 'Failed to load audit logs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchLogs(true); }, [actionFilter, resourceFilter]);
+
+  const pages = Math.max(1, Math.ceil(total / limit));
+  const currentPage = Math.floor(offset / limit) + 1;
+
+  const uniqueActions = [...new Set(logs.map((l) => l.action))];
+
+  return (
+    <section className="dashboard-panel">
+      <div className="flex items-center justify-between border-b border-line-strong px-4 py-4">
+        <div>
+          <div className="eyebrow text-ash-dark">System audit trail // {total} events</div>
+          <h2 className="mt-1 text-base font-semibold text-paper">Audit logs</h2>
+        </div>
+        <button type="button" onClick={() => fetchLogs(true)} className="font-mono-ui text-[10px] text-amber hover:text-amber/80">Refresh</button>
+      </div>
+
+      <div className="flex flex-wrap gap-2 border-b border-line px-4 py-3">
+        <select value={actionFilter} onChange={(e) => { setActionFilter(e.target.value); setOffset(0); }} className="border border-line-strong bg-ink-900 px-2 py-1.5 font-mono-ui text-[10px] text-paper">
+          <option value="">All actions</option>
+          {uniqueActions.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <select value={resourceFilter} onChange={(e) => { setResourceFilter(e.target.value); setOffset(0); }} className="border border-line-strong bg-ink-900 px-2 py-1.5 font-mono-ui text-[10px] text-paper">
+          <option value="">All resources</option>
+          <option value="rule">rule</option>
+          <option value="playbook">playbook</option>
+          <option value="user">user</option>
+          <option value="alert">alert</option>
+        </select>
+      </div>
+
+      {loading ? (
+        <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-ash-dark">Loading audit logs...</div>
+      ) : error ? (
+        <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-red">{error}</div>
+      ) : logs.length === 0 ? (
+        <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-ash-dark">No audit events recorded yet.</div>
+      ) : (
+        <div className="divide-y divide-line">
+          {logs.map((log) => (
+            <div key={log.id} className="px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="shrink-0 bg-amber/15 px-1.5 py-0.5 font-mono-ui text-[9px] text-amber">{log.action}</span>
+                  <span className="font-mono-ui text-xs text-paper truncate">{log.resource_type}{log.resource_id ? ` #${log.resource_id}` : ''}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="font-mono-ui text-[9px] text-ash-dark">{log.created_at?.replace('T', ' ').slice(0, 19)}</span>
+                  {log.details && (
+                    <button type="button" onClick={() => setExpanded(expanded === log.id ? null : log.id)} className="font-mono-ui text-[9px] text-amber hover:text-amber/80">
+                      {expanded === log.id ? 'hide' : 'details'}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {expanded === log.id && log.details && (
+                <pre className="mt-2 max-h-40 overflow-auto border border-line-strong bg-ink-950 p-2 font-mono-ui text-[9px] text-ash leading-4">
+                  {JSON.stringify(log.details, null, 2)}
+                </pre>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between border-t border-line px-4 py-3 font-mono-ui text-[10px] text-ash-dark">
+        <span>Page {currentPage} / {pages}</span>
+        <div className="flex gap-2">
+          <button type="button" disabled={currentPage <= 1} onClick={() => { setOffset((currentPage - 2) * limit); fetchLogs(); }} className="px-2 py-1 text-amber disabled:opacity-30 hover:text-amber/80">Prev</button>
+          <button type="button" disabled={currentPage >= pages} onClick={() => { setOffset(currentPage * limit); fetchLogs(); }} className="px-2 py-1 text-amber disabled:opacity-30 hover:text-amber/80">Next</button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function EvalPanel() {
   const [evalData, setEvalData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchEval = async (force = false) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('flare_token');
+      const res = await fetch(`${API_BASE}/api/v1/eval${force ? '?force=true' : ''}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        if (res.status === 401) throw new Error('Authentication required — please log in again.');
+        if (res.status === 403) throw new Error('Access denied.');
+        throw new Error(`Failed to load eval: ${res.status}`);
+      }
+      const json = await res.json();
+      setEvalData(json.data || json);
+      setError(null);
+    } catch (err) {
+      setError(err.message || 'Failed to load eval data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_BASE}/api/v1/eval`)
-      .then((res) => res.json())
-      .then((json) => { if (!cancelled) { setEvalData(json.data || json); setLoading(false); } })
-      .catch(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    fetchEval();
   }, []);
 
   if (loading) {
@@ -168,31 +381,62 @@ function EvalPanel() {
     );
   }
 
+  if (error) {
+    return (
+      <section className="dashboard-panel">
+        <div className="flex items-center justify-between border-b border-line-strong px-4 py-4">
+          <div>
+            <div className="eyebrow text-ash-dark">Evaluation</div>
+            <h2 className="mt-1 text-base font-semibold text-paper">Classification evaluation</h2>
+          </div>
+          <button type="button" onClick={() => { setLoading(true); setError(null); fetchEval(); }} className="font-mono-ui text-[10px] text-amber hover:text-amber/80">Retry</button>
+        </div>
+        <div className="px-4 py-8 text-center font-mono-ui text-[10px] text-red">{error}</div>
+      </section>
+    );
+  }
+
   const matrix = evalData?.confusion_matrix?.matrix || [[0,0,0],[0,0,0],[0,0,0]];
   const labels = evalData?.confusion_matrix?.labels || ['low', 'medium', 'high'];
-  const severityAccuracy = evalData?.severity_accuracy || 0;
+  const breakdown = evalData?.attack_type_breakdown || {};
+  const misclassified = evalData?.rows?.filter((r) => r.pred_severity !== r.true_severity || r.pred_attack_type !== r.true_attack_type) || [];
+  const sampleSize = evalData?.sample_size || 0;
   const highF1 = evalData?.high_severity_f1 || 0;
   const avgLatency = evalData?.avg_latency_ms || 0;
-  const sampleSize = evalData?.sample_size || 0;
 
   return (
     <section className="dashboard-panel">
-      <div className="border-b border-line-strong px-4 py-4">
-        <div className="eyebrow text-ash-dark">{sampleSize} labeled alerts</div>
-        <h2 className="mt-1 text-base font-semibold text-paper">Classification evaluation</h2>
+      <div className="flex items-center justify-between border-b border-line-strong px-4 py-4">
+        <div>
+          <div className="eyebrow text-ash-dark">{sampleSize} labeled alerts</div>
+          <h2 className="mt-1 text-base font-semibold text-paper">Classification evaluation</h2>
+        </div>
+        <button type="button" onClick={() => fetchEval(true)} className="font-mono-ui text-[10px] text-amber hover:text-amber/80">Refresh</button>
       </div>
       <div className="grid gap-4 p-4 md:grid-cols-3">
         <div className="metric-block border border-line-strong p-4">
           <div className="font-mono-ui text-[9px] text-ash-dark">SEVERITY ACCURACY</div>
-          <div className="mt-2 font-mono-ui text-3xl text-amber"><AnimatedNumber value={severityAccuracy} decimals={2} /></div>
+          <div className="mt-2 font-mono-ui text-3xl text-amber"><AnimatedNumber value={evalData?.severity_accuracy || 0} decimals={2} /></div>
         </div>
         <div className="metric-block border border-line-strong p-4">
-          <div className="font-mono-ui text-[9px] text-ash-dark">HIGH F1</div>
-          <div className="mt-2 font-mono-ui text-3xl text-green"><AnimatedNumber value={highF1 || 0} decimals={2} /></div>
+          <div className="font-mono-ui text-[9px] text-ash-dark">ATTACK TYPE ACCURACY</div>
+          <div className="mt-2 font-mono-ui text-3xl text-cyan"><AnimatedNumber value={evalData?.attack_type_accuracy || 0} decimals={2} /></div>
         </div>
         <div className="metric-block border border-line-strong p-4">
           <div className="font-mono-ui text-[9px] text-ash-dark">AVG LATENCY</div>
           <div className="mt-2 font-mono-ui text-3xl text-cyan"><AnimatedNumber value={avgLatency} suffix="ms" decimals={0} /></div>
+        </div>
+        <div className="metric-block border border-line-strong p-4">
+          <div className="font-mono-ui text-[9px] text-ash-dark">HIGH PRECISION</div>
+          <div className="mt-2 font-mono-ui text-3xl text-green"><AnimatedNumber value={evalData?.high_severity_precision ?? 0} decimals={2} /></div>
+        </div>
+        <div className="metric-block border border-line-strong p-4">
+          <div className="font-mono-ui text-[9px] text-ash-dark">HIGH RECALL</div>
+          <div className="mt-2 font-mono-ui text-3xl text-green"><AnimatedNumber value={evalData?.high_severity_recall ?? 0} decimals={2} /></div>
+        </div>
+        <div className="metric-block border border-line-strong p-4">
+          <div className="font-mono-ui text-[9px] text-ash-dark">HIGH F1</div>
+          <div className="mt-2 font-mono-ui text-3xl text-green"><AnimatedNumber value={highF1 || 0} decimals={2} /></div>
         </div>
       </div>
       <div className="border-t border-line p-4">
@@ -216,6 +460,35 @@ function EvalPanel() {
               ))}
             </div>
           ))}
+        </div>
+      </div>
+      <div className="border-t border-line p-4">
+        <div className="eyebrow mb-3 text-ash-dark">Attack type breakdown</div>
+        <div className="grid gap-2 md:grid-cols-2">
+          {Object.entries(breakdown).map(([atk, data]) => (
+            <div key={atk} className="flex items-center justify-between border border-line-strong px-3 py-2 font-mono-ui text-[10px]">
+              <span className="text-paper">{atk}</span>
+              <span className="text-amber">{data.correct}/{data.true_count} ({Math.round((data.accuracy || 0) * 100)}%)</span>
+            </div>
+          ))}
+          {Object.keys(breakdown).length === 0 && (
+            <div className="font-mono-ui text-[10px] text-ash-dark">No breakdown data.</div>
+          )}
+        </div>
+      </div>
+      <div className="border-t border-line p-4">
+        <div className="eyebrow mb-3 text-ash-dark">Misclassified ({evalData?.misclassified_count ?? 0})</div>
+        <div className="max-h-48 overflow-y-auto space-y-1">
+          {misclassified.slice(0, 20).map((r, i) => (
+            <div key={i} className="flex items-center justify-between border border-line px-3 py-1.5 font-mono-ui text-[9px]">
+              <span className="text-ash-dark truncate flex-1">{r.signature?.slice(0, 60)}</span>
+              <span className="text-red ml-2">true:{r.true_severity}/{r.true_attack_type}</span>
+              <span className="text-amber ml-2">pred:{r.pred_severity}/{r.pred_attack_type}</span>
+            </div>
+          ))}
+          {misclassified.length === 0 && (
+            <div className="font-mono-ui text-[10px] text-ash-dark">No misclassifications.</div>
+          )}
         </div>
       </div>
     </section>
@@ -500,12 +773,16 @@ function RulesPanel() {
   );
 }
 
-function PlaybooksPanel() {
+function PlaybooksPanel({ selected }) {
   const [playbooks, setPlaybooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', description: '', alert_type: '', steps: [{ type: 'manual', title: '', description: '' }] });
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ name: '', description: '', alert_type: '', severity_threshold: '', steps: [{ type: 'manual', title: '', description: '' }] });
   const [error, setError] = useState('');
+  const [executing, setExecuting] = useState(null);
+  const [execution, setExecution] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   const fetchPlaybooks = () => {
     const token = localStorage.getItem('flare_token');
@@ -517,18 +794,50 @@ function PlaybooksPanel() {
 
   useEffect(() => { fetchPlaybooks(); }, []);
 
-  const handleCreate = async () => {
+  useEffect(() => {
+    if (!execution?.id) return undefined;
+    if (execution.status === 'completed') return undefined;
+    const id = setInterval(async () => {
+      const token = localStorage.getItem('flare_token');
+      const res = await fetch(`${API_BASE}/api/v1/playbooks/executions/${execution.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setExecution(await res.json());
+    }, 3000);
+    return () => clearInterval(id);
+  }, [execution?.id, execution?.status]);
+
+  const resetForm = () => {
+    setForm({ name: '', description: '', alert_type: '', severity_threshold: '', steps: [{ type: 'manual', title: '', description: '' }] });
+    setEditing(null);
+    setShowForm(false);
+  };
+
+  const openEdit = (pb) => {
+    setForm({
+      name: pb.name || '',
+      description: pb.description || '',
+      alert_type: pb.alert_type || '',
+      severity_threshold: pb.severity_threshold || '',
+      steps: pb.steps?.length ? pb.steps.map((s) => ({ type: s.type || 'manual', title: s.title || s.label || '', description: s.description || '' })) : [{ type: 'manual', title: '', description: '' }],
+    });
+    setEditing(pb.id);
+    setShowForm(true);
+    setError('');
+  };
+
+  const handleSubmit = async () => {
     setError('');
     const token = localStorage.getItem('flare_token');
+    const payload = { ...form, steps: form.steps.filter((s) => s.title) };
     try {
-      const res = await fetch(`${API_BASE}/api/v1/playbooks`, {
-        method: 'POST',
+      const res = await fetch(`${API_BASE}/api/v1/playbooks${editing ? `/${editing}` : ''}`, {
+        method: editing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...form, is_enabled: true }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Failed'); }
-      setShowForm(false);
-      setForm({ name: '', description: '', alert_type: '', steps: [{ type: 'manual', title: '', description: '' }] });
+      resetForm();
       fetchPlaybooks();
     } catch (err) { setError(err.message); }
   };
@@ -539,6 +848,44 @@ function PlaybooksPanel() {
     fetchPlaybooks();
   };
 
+  const handleExecute = async (pb) => {
+    setBusy(true);
+    setError('');
+    const token = localStorage.getItem('flare_token');
+    try {
+      const params = new URLSearchParams();
+      if (selected?.id) params.set('alert_id', selected.id);
+      const res = await fetch(`${API_BASE}/api/v1/playbooks/${pb.id}/execute?${params}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Execute failed'); }
+      const data = await res.json();
+      const statusRes = await fetch(`${API_BASE}/api/v1/playbooks/executions/${data.execution_id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setExecution(statusRes.ok ? await statusRes.json() : { id: data.execution_id, status: 'in_progress', steps: pb.steps, completed_steps: [], current_step: 0 });
+    } catch (err) { setError(err.message); }
+    setBusy(false);
+  };
+
+  const handleCompleteStep = async (executionId, stepIndex) => {
+    const token = localStorage.getItem('flare_token');
+    const res = await fetch(`${API_BASE}/api/v1/playbooks/executions/${executionId}/steps/${stepIndex}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ notes: '' }),
+    });
+    if (res.ok) {
+      const refreshed = await fetch(`${API_BASE}/api/v1/playbooks/executions/${executionId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (refreshed.ok) setExecution(await refreshed.json());
+    }
+  };
+
+  const closeExecution = () => { setExecution(null); fetchPlaybooks(); };
+
   return (
     <section className="dashboard-panel">
       <div className="flex items-center justify-between border-b border-line-strong px-4 py-4">
@@ -546,27 +893,70 @@ function PlaybooksPanel() {
           <div className="eyebrow text-ash-dark">Incident response</div>
           <h2 className="mt-1 text-base font-semibold text-paper">Playbooks</h2>
         </div>
-        <button type="button" onClick={() => setShowForm(!showForm)} className="font-mono-ui text-[10px] text-amber hover:text-amber/80">
+        <button type="button" onClick={() => { setShowForm(!showForm); if (showForm) resetForm(); }} className="font-mono-ui text-[10px] text-amber hover:text-amber/80">
           {showForm ? 'Cancel' : '+ New Playbook'}
         </button>
       </div>
 
+      {error && <div className="border-b border-line px-4 py-2 font-mono-ui text-[10px] text-red">{error}</div>}
+
       {showForm && (
         <div className="border-b border-line p-4 space-y-3">
-          {error && <div className="font-mono-ui text-[10px] text-red">{error}</div>}
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Playbook name" className="w-full border border-line-strong bg-ink-900 px-3 py-2 font-mono-ui text-[11px] text-paper outline-none" />
           <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description" className="w-full border border-line-strong bg-ink-900 px-3 py-2 font-mono-ui text-[11px] text-paper outline-none" />
-          <input value={form.alert_type} onChange={(e) => setForm({ ...form, alert_type: e.target.value })} placeholder="Alert type (e.g. ddos, malware)" className="w-full border border-line-strong bg-ink-900 px-3 py-2 font-mono-ui text-[11px] text-paper outline-none" />
+          <div className="grid grid-cols-2 gap-2">
+            <input value={form.alert_type} onChange={(e) => setForm({ ...form, alert_type: e.target.value })} placeholder="Alert type (e.g. ddos)" className="border border-line-strong bg-ink-900 px-2 py-2 font-mono-ui text-[10px] text-paper outline-none" />
+            <select value={form.severity_threshold} onChange={(e) => setForm({ ...form, severity_threshold: e.target.value })} className="border border-line-strong bg-ink-900 px-2 py-2 font-mono-ui text-[10px] text-paper">
+              <option value="">Any severity</option>
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+              <option value="critical">critical</option>
+            </select>
+          </div>
           <div className="space-y-2">
             {form.steps.map((step, i) => (
               <div key={i} className="flex gap-2">
+                <select value={step.type} onChange={(e) => { const s = [...form.steps]; s[i] = { ...s[i], type: e.target.value }; setForm({ ...form, steps: s }); }} className="border border-line-strong bg-ink-900 px-1 py-1 font-mono-ui text-[10px] text-paper">
+                  <option value="manual">manual</option>
+                  <option value="auto">auto</option>
+                  <option value="approval">approval</option>
+                </select>
                 <input value={step.title} onChange={(e) => { const s = [...form.steps]; s[i] = { ...s[i], title: e.target.value }; setForm({ ...form, steps: s }); }} placeholder={`Step ${i + 1} title`} className="flex-1 border border-line-strong bg-ink-900 px-2 py-1 font-mono-ui text-[10px] text-paper outline-none" />
                 <button type="button" onClick={() => setForm({ ...form, steps: form.steps.filter((_, j) => j !== i) })} className="text-red font-mono-ui text-[10px]">x</button>
               </div>
             ))}
             <button type="button" onClick={() => setForm({ ...form, steps: [...form.steps, { type: 'manual', title: '', description: '' }] })} className="font-mono-ui text-[10px] text-amber">+ Add step</button>
           </div>
-          <button type="button" onClick={handleCreate} className="w-full bg-amber/20 border border-amber/40 py-2 font-mono-ui text-[10px] text-amber hover:bg-amber/30">Create Playbook</button>
+          <button type="button" onClick={handleSubmit} className="w-full bg-amber/20 border border-amber/40 py-2 font-mono-ui text-[10px] text-amber hover:bg-amber/30">{editing ? 'Update Playbook' : 'Create Playbook'}</button>
+        </div>
+      )}
+
+      {execution && (
+        <div className="border-b border-line p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="font-mono-ui text-[10px] text-amber">EXECUTION // {execution.status?.toUpperCase()}</div>
+            <button type="button" onClick={closeExecution} className="font-mono-ui text-[10px] text-ash-dark hover:text-red">Close</button>
+          </div>
+          {execution.alert_id && <div className="font-mono-ui text-[9px] text-ash-dark">Alert: {execution.alert_id}</div>}
+          <div className="space-y-2">
+            {(execution.steps || []).map((step, i) => {
+              const done = (execution.completed_steps || []).includes(i);
+              const current = execution.current_step === i;
+              return (
+                <div key={i} className={`flex items-center justify-between gap-2 border px-3 py-2 ${done ? 'border-green/30 bg-green/5' : current ? 'border-amber/40 bg-amber/5' : 'border-line-strong'}`}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`font-mono-ui text-[9px] ${done ? 'text-green' : current ? 'text-amber' : 'text-ash-dark'}`}>{done ? '✓' : current ? '►' : '○'}</span>
+                    <span className={`px-1 py-0.5 font-mono-ui text-[9px] ${step.type === 'auto' ? 'bg-green/10 text-green' : step.type === 'approval' ? 'bg-cyan/10 text-cyan' : 'bg-blue/10 text-blue'}`}>{step.type}</span>
+                    <span className="font-mono-ui text-[10px] text-paper truncate">{step.title || step.label || 'Untitled'}</span>
+                  </div>
+                  {!done && current && (
+                    <button type="button" onClick={() => handleCompleteStep(execution.id, i)} className="shrink-0 bg-amber/20 border border-amber/40 px-2 py-1 font-mono-ui text-[9px] text-amber hover:bg-amber/30">Complete</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -579,14 +969,18 @@ function PlaybooksPanel() {
           playbooks.map((pb) => (
             <div key={pb.id} className="px-4 py-4">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="font-mono-ui text-xs text-paper">{pb.name}</div>
                   <div className="mt-1 font-mono-ui text-[10px] text-ash-dark">{pb.description || 'No description'}</div>
-                  <div className="mt-1 font-mono-ui text-[9px] text-amber">{pb.execution_count} executions // {pb.steps?.length || 0} steps</div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono-ui text-[9px] text-amber">
+                    <span>{pb.execution_count} executions</span>
+                    <span>{pb.steps?.length || 0} steps</span>
+                    {pb.alert_type && <span>type:{pb.alert_type}</span>}
+                    {pb.severity_threshold && <span>min:{pb.severity_threshold}</span>}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <StatusDot tone={pb.is_enabled ? 'live' : 'offline'} />
-                  <button type="button" onClick={() => handleDelete(pb.id)} className="font-mono-ui text-[10px] text-red hover:text-red/80">Delete</button>
                 </div>
               </div>
               {pb.steps && pb.steps.length > 0 && (
@@ -594,12 +988,17 @@ function PlaybooksPanel() {
                   {pb.steps.map((step, i) => (
                     <div key={i} className="flex items-center gap-2 font-mono-ui text-[9px] text-ash-dark">
                       <span className="text-amber">{i + 1}.</span>
-                      <span className={`px-1 py-0.5 ${step.type === 'auto' ? 'bg-green/10 text-green' : 'bg-blue/10 text-blue'}`}>{step.type}</span>
-                      <span>{step.title || 'Untitled step'}</span>
+                      <span className={`px-1 py-0.5 ${step.type === 'auto' ? 'bg-green/10 text-green' : step.type === 'approval' ? 'bg-cyan/10 text-cyan' : 'bg-blue/10 text-blue'}`}>{step.type}</span>
+                      <span className="truncate">{step.title || step.label || 'Untitled step'}</span>
                     </div>
                   ))}
                 </div>
               )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={() => handleExecute(pb)} disabled={busy} className="bg-amber/20 border border-amber/40 px-2 py-1 font-mono-ui text-[9px] text-amber hover:bg-amber/30 disabled:opacity-50">Execute</button>
+                <button type="button" onClick={() => openEdit(pb)} className="border border-line-strong px-2 py-1 font-mono-ui text-[9px] text-paper hover:border-amber/40">Edit</button>
+                <button type="button" onClick={() => handleDelete(pb.id)} className="border border-line-strong px-2 py-1 font-mono-ui text-[9px] text-red hover:border-red/40">Delete</button>
+              </div>
             </div>
           ))
         )}
@@ -737,10 +1136,11 @@ export default function WorkspacePanel({ section, alerts, filteredAlerts, select
   }
   if (section === 'health') return <HealthPanel />;
   if (section === 'timeline') return <TimelinePanel />;
+  if (section === 'audit-logs') return <AuditLogsPanel />;
   if (section === 'correlated') return <CorrelatedPanel alerts={alerts} onFilterChange={onFilterChange} />;
   if (section === 'eval') return <EvalPanel />;
   if (section === 'rules') return <RulesPanel />;
-  if (section === 'playbooks') return <PlaybooksPanel />;
+  if (section === 'playbooks') return <PlaybooksPanel selected={selected} />;
   if (section === 'notifications') return <NotificationsPanel />;
   if (section === 'export') return <ExportPanel filters={filters} />;
   return null;

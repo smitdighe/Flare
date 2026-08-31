@@ -1,6 +1,7 @@
 """
 SQLAlchemy ORM models for Flare.
 """
+import json
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import String, Boolean, Float, Integer, Text, ForeignKey, Index
@@ -74,6 +75,7 @@ class Alert(Base):
     mitre_technique: Mapped[str] = mapped_column(String(100), nullable=True)
     explanation: Mapped[str] = mapped_column(Text, nullable=True)
     remediation: Mapped[str] = mapped_column(Text, nullable=True)
+    matched_rules: Mapped[str] = mapped_column(Text, nullable=True)
     classify_latency_ms: Mapped[float] = mapped_column(Float, nullable=True)
     enrich_latency_ms: Mapped[float] = mapped_column(Float, nullable=True)
     reasoning_latency_ms: Mapped[float] = mapped_column(Float, nullable=True)
@@ -99,6 +101,7 @@ class Alert(Base):
             "mitre_technique": self.mitre_technique,
             "explanation": self.explanation,
             "remediation": self.remediation,
+            "matched_rules": json.loads(self.matched_rules) if self.matched_rules else [],
             "classify_latency_ms": self.classify_latency_ms,
             "enrich_latency_ms": self.enrich_latency_ms,
             "reasoning_latency_ms": self.reasoning_latency_ms,

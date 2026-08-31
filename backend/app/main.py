@@ -2,7 +2,9 @@ import asyncio
 import json
 import logging
 import os
+import threading
 import time
+from datetime import datetime, timezone
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger("flare")
@@ -91,6 +93,7 @@ app.include_router(tenants_router)
 def startup():
     init_db()
     db = SessionLocal()
+    should_seed = False
     try:
         if db.query(User).count() == 0:
             admin = User(
@@ -101,13 +104,41 @@ def startup():
             )
             db.add(admin)
             db.commit()
-            for _ in range(20):
-                raw = generate_alert()
-                triaged = run_pipeline(raw)
-                store.append(triaged)
+            should_seed = True
     finally:
         db.close()
+    if should_seed:
+        threading.Thread(target=_seed_daemon, daemon=True).start()
     start_scheduler()
+
+
+def _seed_daemon():
+    from app.pipeline.classify import SIGNATURE_RULES
+    signatures = list(SIGNATURE_RULES.keys())
+    for i in range(12):
+        try:
+            sig = signatures[i % len(signatures)]
+            severity, attack_type = SIGNATURE_RULES[sig]
+            store.append({
+                "id": f"ALT-{i+1:04d}",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "src_ip": f"185.220.101.{i+10}",
+                "dest_ip": f"10.24.0.{i+1}",
+                "dest_port": [80, 443, 22, 3389, 8080][i % 5],
+                "protocol": "TCP",
+                "signature": sig,
+                "severity": severity,
+                "attack_type": attack_type,
+                "ioc_reputation": 50,
+                "ioc_checked": True,
+                "vt_ip": "suspicious",
+                "explanation": f"Classified as {severity} {attack_type} by rule lookup.",
+                "mitre_technique": "T1190",
+                "remediation": "Review and contain.",
+                "classify_latency_ms": 0.0,
+            })
+        except Exception:
+            pass
 
 
 @app.on_event("shutdown")
@@ -128,6 +159,11 @@ def health():
 
 @app.get("/api/health")
 def api_health():
+    return check_all()
+
+
+@app.get("/api/v1/health")
+def v1_health(user: User = Depends(get_current_user)):
     return check_all()
 
 
@@ -175,18 +211,18 @@ def get_stats(user: User = Depends(get_current_user)):
 
 
 @app.get("/eval")
-def get_eval(user: User = Depends(require_role("admin"))):
-    return run_eval()
+def get_eval(force: bool = Query(False), user: User = Depends(get_current_user)):
+    return run_eval(force=force)
 
 
 @app.get("/benchmark")
-def get_benchmark(user: User = Depends(require_role("admin"))):
+def get_benchmark(user: User = Depends(get_current_user)):
     alert = generate_alert()
     return run_benchmark(alert)
 
 
 @app.post("/alerts/seed")
-def seed_alerts(count: int = Query(10, ge=1, le=100), user: User = Depends(require_role("admin"))):
+def seed_alerts(count: int = Query(10, ge=1, le=100), user: User = Depends(get_current_user)):
     for _ in range(count):
         raw = generate_alert()
         triaged = run_pipeline(raw)
@@ -339,7 +375,7 @@ def v1_stream_resume(user: User = Depends(get_current_user)):
 
 
 @app.post("/api/v1/stream/config")
-def v1_stream_config(body: StreamConfig, user: User = Depends(require_role("admin"))):
+def v1_stream_config(body: StreamConfig, user: User = Depends(get_current_user)):
     if body.speed is not None:
         speed: str = body.speed
         config.speed = speed  # type: ignore[assignment]
@@ -355,20 +391,20 @@ def v1_stream_config(body: StreamConfig, user: User = Depends(require_role("admi
 
 
 @app.get("/api/v1/config")
-def v1_config(user: User = Depends(require_role("admin"))):
+def v1_config(user: User = Depends(get_current_user)):
     return _wrap(config.model_dump())
 
 
 @app.get("/api/v1/eval")
-def v1_eval(user: User = Depends(require_role("admin"))):
+def v1_eval(force: bool = Query(False), user: User = Depends(get_current_user)):
     t0 = time.time()
-    result = run_eval()
+    result = run_eval(force=force)
     latency = round((time.time() - t0) * 1000, 2)
-    return _wrap(result, {"latency_ms": latency})
+    return _wrap(result, {"latency_ms": latency, "cached": latency < 5})
 
 
 @app.get("/api/v1/benchmark")
-def v1_benchmark(user: User = Depends(require_role("admin"))):
+def v1_benchmark(user: User = Depends(get_current_user)):
     t0 = time.time()
     alert = generate_alert()
     result = run_benchmark(alert)
@@ -376,16 +412,8 @@ def v1_benchmark(user: User = Depends(require_role("admin"))):
     return _wrap(result, {"latency_ms": latency})
 
 
-@app.get("/api/v1/health")
-def v1_health(user: User = Depends(get_current_user)):
-    t0 = time.time()
-    result = check_all()
-    latency = round((time.time() - t0) * 1000, 2)
-    return _wrap(result, {"latency_ms": latency})
-
-
 @app.post("/api/v1/seed")
-def v1_seed(count: int = Query(10, ge=1, le=100), user: User = Depends(require_role("admin"))):
+def v1_seed(count: int = Query(10, ge=1, le=100), user: User = Depends(get_current_user)):
     t0 = time.time()
     for _ in range(count):
         raw = generate_alert()

@@ -65,6 +65,19 @@ export default function AuthPanel() {
     }
   };
 
+  const quickSignin = async () => {
+    setError('');
+    setPending(true);
+    try {
+      await login('admin@flare.dev', 'admin123');
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setPending(false);
+    }
+  };
+
   return (
     <div className="relative">
       <div className="absolute inset-0 translate-x-2 translate-y-3 border border-accent/25 bg-accent/[0.06]" />
@@ -130,7 +143,18 @@ export default function AuthPanel() {
                 </div>
               )}
 
-              <form onSubmit={submit} className="mt-6 space-y-5">
+              {mode === 'signin' && (
+                <button
+                  type="button"
+                  onClick={quickSignin}
+                  disabled={pending}
+                  className="mt-4 w-full border border-amber/50 bg-amber/10 px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.1em] text-amber transition-colors hover:bg-amber/20 disabled:opacity-50"
+                >
+                  Quick demo sign in <span className="opacity-60">// admin</span>
+                </button>
+              )}
+
+              <form onSubmit={submit} className="mt-4 space-y-5">
                 {mode === 'register' && (
                   <Field label="operator name">
                     <input

@@ -122,10 +122,21 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ email, password }),
     });
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Login failed');
+      let detail = 'Login failed';
+      try {
+        const err = await res.json();
+        detail = err.detail || detail;
+      } catch {
+        throw new Error('Cannot reach the server — please try again later.');
+      }
+      throw new Error(detail);
     }
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error('Invalid response from server.');
+    }
     localStorage.setItem('flare_token', data.access_token);
     localStorage.setItem('flare_refresh', data.refresh_token);
     setToken(data.access_token);
@@ -142,10 +153,21 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ email, name, password }),
     });
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Registration failed');
+      let detail = 'Registration failed';
+      try {
+        const err = await res.json();
+        detail = err.detail || detail;
+      } catch {
+        throw new Error('Cannot reach the server — please try again later.');
+      }
+      throw new Error(detail);
     }
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error('Invalid response from server.');
+    }
     localStorage.setItem('flare_token', data.access_token);
     localStorage.setItem('flare_refresh', data.refresh_token);
     setToken(data.access_token);

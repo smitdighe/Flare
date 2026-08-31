@@ -3,8 +3,23 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowUpRight, Cpu, Waves, Orbit } from "lucide-react";
 import { AGENTS, velocitySeries } from "../../lib/flare-data.js";
 
-export function SignalVelocity() {
-  const data = useMemo(() => velocitySeries(2), []);
+export function SignalVelocity({ alerts = [] }) {
+  const liveMode = !import.meta.env.DEV;
+  const data = useMemo(() => {
+    if (!liveMode) return velocitySeries(2);
+    const buckets = Array.from({ length: 32 }, () => 0);
+    const now = Date.now();
+    alerts.forEach((a) => {
+      const t = new Date(a.timestamp).getTime();
+      const ageMin = (now - t) / 60000;
+      if (ageMin >= 0 && ageMin < 60) {
+        const idx = 31 - Math.floor(ageMin / (60 / 32));
+        if (idx >= 0 && idx < 32) buckets[idx] += 1;
+      }
+    });
+    const max = Math.max(...buckets, 1);
+    return buckets.map((v) => 0.06 + (v / max) * 0.94);
+  }, [alerts, liveMode]);
   const [hover, setHover] = useState(null);
   const W = 300;
   const H = 96;
@@ -13,6 +28,7 @@ export function SignalVelocity() {
   const line = pts.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
   const area = `${line} L${W},${H} L0,${H} Z`;
   const peak = Math.round(Math.max(...data) * 62);
+  const nowVal = Math.round(data[data.length - 1] * 62);
 
   return (
     <div className="panel scanline relative overflow-hidden">
@@ -94,7 +110,7 @@ export function SignalVelocity() {
 
       <div className="grid grid-cols-3 divide-x divide-border border-t border-border">
         {[
-          ["now", "37/m"],
+          ["now", `${nowVal}/m`],
           ["peak", `${peak}/m`],
           ["window", "60m"],
         ].map(([k, v]) => (
@@ -243,16 +259,24 @@ export function AttackSurface({ alerts = [] }) {
 }
 
 export function AgentActivity() {
+  const liveMode = !import.meta.env.DEV;
+  const stages = [
+    { name: "classify", state: "active", load: 0.82 },
+    { name: "enrich", state: "active", load: 0.64 },
+    { name: "reason", state: "active", load: 0.71 },
+    { name: "rules", state: "active", load: 0.45 },
+  ];
+  const items = liveMode ? stages : AGENTS;
   return (
     <div className="panel">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <span className="mono-label flex items-center gap-2">
-          <Cpu className="h-3 w-3 text-primary" /> agent activity
+          <Cpu className="h-3 w-3 text-primary" /> pipeline activity
         </span>
         <ArrowUpRight className="h-3 w-3 text-muted-foreground" />
       </div>
       <div className="space-y-3 px-4 py-3">
-        {AGENTS.map((a, i) => (
+        {items.map((a, i) => (
           <div key={a.name}>
             <div className="flex items-center justify-between font-mono text-[11px]">
               <span className="uppercase tracking-[0.12em]">{a.name}</span>
@@ -276,7 +300,7 @@ export function AgentActivity() {
 export function RightRail({ alerts = [] }) {
   return (
     <div className="space-y-4">
-      <SignalVelocity />
+      <SignalVelocity alerts={alerts} />
       <AttackSurface alerts={alerts} />
       <AgentActivity />
     </div>

@@ -41,6 +41,10 @@ class AlertStore:
             if isinstance(remediation, list):
                 remediation = json.dumps(remediation)
 
+            matched_rules = alert.get("matched_rules")
+            if isinstance(matched_rules, list):
+                matched_rules = json.dumps(matched_rules)
+
             db_alert = Alert(
                 id=alert.get("id", ""),
                 user_id=alert.get("user_id"),
@@ -59,6 +63,7 @@ class AlertStore:
                 mitre_technique=alert.get("mitre_technique"),
                 explanation=alert.get("explanation"),
                 remediation=remediation,
+                matched_rules=matched_rules,
                 classify_latency_ms=alert.get("classify_latency_ms"),
                 enrich_latency_ms=alert.get("enrich_latency_ms"),
                 reasoning_latency_ms=alert.get("reasoning_latency_ms"),

@@ -1,13 +1,18 @@
 """
-Eval harness: runs the real classification pipeline against 24 labeled
+Eval harness: runs the real classification pipeline against 26 labeled
 ground-truth alerts and computes precision/recall with a confusion matrix.
-Refreshed live whenever a judge asks to see it.
+Results are cached for 120s to avoid burning free-tier LLM quotas on repeat views.
 """
+import time
 import uuid
 from datetime import datetime, timezone
 
 from app.data.sample_alerts import GROUND_TRUTH, KNOWN_BAD_IPS, ENRICHED_SIGNATURES
 from app.pipeline.classify import classify_alert
+
+
+_EVAL_CACHE: dict = {}
+_EVAL_CACHE_TTL: int = 120  # seconds
 
 
 GROUND_TRUTH_EXPANDED = {
@@ -70,7 +75,17 @@ def _build_confusion_matrix(rows: list[dict]) -> dict:
     return result
 
 
-def run_eval() -> dict:
+def run_eval(force: bool = False) -> dict:
+    now = time.time()
+    if not force and _EVAL_CACHE.get("data") and (now - _EVAL_CACHE.get("ts", 0)) < _EVAL_CACHE_TTL:
+        return _EVAL_CACHE["data"]
+    result = _run_eval_uncached()
+    _EVAL_CACHE["data"] = result
+    _EVAL_CACHE["ts"] = now
+    return result
+
+
+def _run_eval_uncached() -> dict:
     labeled_alerts = [
         _build_labeled_alert(sig, sev, atype) for sig, (sev, atype) in GROUND_TRUTH_EXPANDED.items()
     ]

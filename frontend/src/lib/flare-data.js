@@ -8,11 +8,12 @@ export const SEVERITY_STYLES = {
 
 export const SECTIONS = [
   { slug: "overview", label: "overview" },
-  { slug: "live-feed", label: "live feed" },
-  { slug: "health-metrics", label: "health metrics" },
-  { slug: "system-logs", label: "system logs" },
-  { slug: "threat-clusters", label: "threat clusters" },
-  { slug: "evaluation", label: "evaluation" },
+  { slug: "feed", label: "live feed" },
+  { slug: "health", label: "health metrics" },
+  { slug: "timeline", label: "event velocity" },
+  { slug: "audit-logs", label: "audit logs" },
+  { slug: "correlated", label: "threat clusters" },
+  { slug: "eval", label: "evaluation" },
   { slug: "rules", label: "rules" },
   { slug: "playbooks", label: "playbooks" },
   { slug: "notifications", label: "notifications" },

@@ -1,4 +1,4 @@
-@echo off
+@echo on
 title Flare Project Launcher
 cd /d "%~dp0"
 
@@ -41,9 +41,9 @@ echo Prerequisites OK.
 echo.
 
 echo Checking backend dependencies...
-python -m pip show uvicorn >nul 2>&1
+pip show uvicorn >nul 2>&1
 if errorlevel 1 (
-    echo [INFO] Installing backend dependencies - this may take a few minutes...
+    echo [INFO] Installing backend dependencies (first run may take a few minutes)...
     python -m pip install -r "%~dp0backend\requirements.txt"
     if errorlevel 1 (
         echo [ERROR] Failed to install backend dependencies.

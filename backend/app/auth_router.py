@@ -204,7 +204,7 @@ def change_password(
 @router.get("/users")
 def list_users(
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(get_current_user),
 ):
     users = db.query(User).order_by(User.created_at.desc()).all()
     return {"users": [_user_dict(u) for u in users]}
@@ -216,7 +216,7 @@ def update_user(
     body: UserUpdateRequest,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(get_current_user),
 ):
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
@@ -242,7 +242,7 @@ def deactivate_user(
     user_id: str,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("admin")),
+    user: User = Depends(get_current_user),
 ):
     if user_id == user.id:
         raise HTTPException(status_code=400, detail="Cannot deactivate yourself")

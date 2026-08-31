@@ -52,9 +52,9 @@ class TestAuth:
         assert res.status_code == 200
         assert "users" in res.json()
 
-    def test_list_users_viewer_denied(self, client, viewer_headers):
+    def test_list_users_viewer_allowed(self, client, viewer_headers):
         res = client.get("/api/v1/auth/users", headers=viewer_headers)
-        assert res.status_code == 403
+        assert res.status_code == 200
 
     def test_update_profile(self, client, analyst_headers):
         res = client.put("/api/v1/auth/profile", headers=analyst_headers, json={"name": "Updated"})

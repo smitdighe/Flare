@@ -8,7 +8,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 export default function DashboardPage() {
   const { token, logout } = useAuth();
-  const [alerts, setAlerts] = useState(() => createMockAlerts());
+  const [alerts, setAlerts] = useState(() => (import.meta.env.DEV ? createMockAlerts() : []));
   const [selected, setSelected] = useState(null);
   const [filters, setFilters] = useState({});
   const [activeSection, setActiveSection] = useState('overview');
@@ -88,6 +88,7 @@ export default function DashboardPage() {
 
   const handleAddAlert = useCallback(() => {
     if (paused) return;
+    if (!import.meta.env.DEV) return;
     setAlerts((current) => [createMockAlert(current.length + 1), ...current].slice(0, 200));
   }, [paused]);
 

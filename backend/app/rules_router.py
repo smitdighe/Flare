@@ -107,3 +107,44 @@ def delete_rule(
     db.commit()
     log_audit(db, user.id, "rule.deleted", "rule", str(rule_id))
     return {"message": "Deleted"}
+
+
+@router.post("/evaluate")
+def evaluate_against_alert(
+    body: dict,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    alert = body.get("alert")
+    if not alert:
+        raise HTTPException(status_code=400, detail="alert is required")
+    rules = db.query(Rule).filter(Rule.is_enabled == True).order_by(Rule.priority.desc()).all()
+    rule_dicts = [
+        {
+            "id": r.id,
+            "name": r.name,
+            "is_enabled": r.is_enabled,
+            "priority": r.priority,
+            "conditions": r.conditions,
+            "actions": r.actions,
+            "match_count": r.match_count,
+        }
+        for r in rules
+    ]
+    from app.rules.engine import evaluate_rules_with_trace
+    trace = evaluate_rules_with_trace(alert, rule_dicts)
+    return {"trace": trace, "rules_evaluated": len(rule_dicts)}
+
+
+@router.get("/alerts/{alert_id}/explain-rules")
+def explain_rules_for_alert(
+    alert_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from app.models_db import Alert
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    matched = json.loads(alert.matched_rules) if alert.matched_rules else []
+    return {"alert_id": alert_id, "matched_rules": matched, "total_fired": sum(1 for m in matched if m.get("fired"))}

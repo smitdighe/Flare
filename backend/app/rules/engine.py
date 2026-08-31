@@ -81,3 +81,46 @@ def process_alert_with_rules(alert: dict, rules: list) -> dict:
             rule["match_count"] = rule.get("match_count", 0) + 1
 
     return modified
+
+
+def evaluate_rules_with_trace(alert: dict, rules: list) -> list:
+    trace = []
+    for rule in rules:
+        is_enabled = rule.get("is_enabled", True)
+        conditions = json.loads(rule["conditions"]) if isinstance(rule["conditions"], str) else (rule["conditions"] or {})
+        actions = json.loads(rule["actions"]) if isinstance(rule["actions"], str) else (rule["actions"] or [])
+
+        condition_results = []
+        for cond in conditions.get("conditions", []):
+            field = cond.get("field", "")
+            operator = cond.get("operator", "")
+            expected = cond.get("value")
+            actual = alert.get(field)
+            result = is_enabled and evaluate_condition(alert, cond)
+            condition_results.append({
+                "field": field,
+                "operator": operator,
+                "expected": expected,
+                "actual": actual,
+                "result": result,
+            })
+
+        logic = conditions.get("logic", "AND").upper()
+        if not condition_results:
+            fired = False
+        elif logic == "OR":
+            fired = any(c["result"] for c in condition_results)
+        else:
+            fired = all(c["result"] for c in condition_results)
+
+        trace.append({
+            "rule_id": rule.get("id"),
+            "rule_name": rule.get("name"),
+            "is_enabled": is_enabled,
+            "logic": logic,
+            "fired": fired,
+            "conditions": condition_results,
+            "match_count": rule.get("match_count", 0) + (1 if fired else 0),
+        })
+
+    return trace
